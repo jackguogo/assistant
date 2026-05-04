@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ai课程助手 - 教师端管理控制台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <style>
+    body { background-color: #f1f5f9; margin: 0; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
+    .material-symbols-outlined { font-size: 20px; vertical-align: middle; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+    @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    .animate-slide-in { animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+  </style>
+</head>
+<body class="text-slate-800">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+    const { createRoot } = ReactDOM;
+
+    const Icon = ({ name, className = "", style = {} }) => <span className={`material-symbols-outlined ${className}`} style={style}>{name}</span>;
+
+    const ReadOnlyBanner = () => (
+      <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 shadow-sm shrink-0 animate-in fade-in">
+        <div className="w-8 h-8 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center shrink-0"><Icon name="history" style={{fontSize: '18px'}}/></div>
+        <div>
+          <p className="text-sm font-bold text-amber-800">只读模式 (历史快照)</p>
+          <p className="text-xs text-amber-700/80 mt-0.5">当前选中的全局学期已永久归档。所有的教务变动与互动操作均已被自动禁用。</p>
+        </div>
+      </div>
+    );
+
+    const generateStudents = () => {
+      const names = ['张子涵','李四','王五','赵六','陈七','刘一','钱二','孙三','周四','吴五','郑六','王七','冯八','陈九','褚十','卫一','蒋二','沈三','韩四','杨五'];
+      const bgColors = ['f1f5f9', 'fecaca', 'fef08a', 'bbf7d0', 'bfdbfe', 'e9d5ff', 'fbcfe8'];
+      return names.map((n, i) => ({
+        id: `20230${(i === 3 ? 8 : i === 4 ? 12 : i >= 5 ? 10 + i : i + 1).toString().padStart(2, '0')}`,
+        name: n, 
+        major: ['软件工程','软件工程','心理学','计算机科学','临床医学','电子信息','软件工程','心理学'][i%8],
+        attendance: i===1? 80 : i===4? 50 : i===7? 85 : 90 + (i%10),
+        healthScore: i===1? 55 : i===2? 62 : i===4? 78 : i===7? 72 : 88 + (i%5),
+        status: i===1||i===2 ? 'alert' : i===4||i===7 ? 'warning' : 'normal',
+        avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${n}&backgroundColor=${bgColors[i % bgColors.length]}`
+      }));
+    };
+
+    const MOCK_DATA = {
+      kpis: { totalStudents: 115, avgAttendance: 95, courseProgress: 4, totalLessons: 16, healthIndex: 92 },
+      initialTerms: [{ id: '2026F', name: '2026秋季班：双脑与心理健康', inviteCode: 'MIND-2026-XDFEAW', status: 'active', startDate: '2026-09-01' }, { id: '2025F', name: '2025秋季班', inviteCode: 'MIND-2025-KLPOQA', status: 'archived', startDate: '2025-09-01' }],
+      alerts: [
+        { id: 'a1', studentId: '2023002', name: '李四', type: '心理预警', level: 'high', reason: "连续7天情绪为“悲伤”，且程度为强烈", time: '10分钟前' },
+        { id: 'a2', studentId: '2023005', name: '王五', type: '心理预警', level: 'high', reason: "连续7天情绪为“悲伤”，且程度为强烈", time: '2小时前' },
+        { id: 'a3', studentId: '2023020', name: '郑六', type: '心理预警', level: 'high', reason: "连续7天情绪为“悲伤”，且程度为强烈", time: '昨天 14:30' }
+      ],
+      allAlertsHistory: [
+        { id: 'a1', studentId: '2023002', name: '李四', type: '心理预警', level: 'high', reason: "连续7天情绪为“悲伤”，且程度为强烈", time: '今天 10:20', status: 'untreated' },
+        { id: 'a2', studentId: '2023005', name: '王五', type: '心理预警', level: 'high', reason: "连续7天情绪为“悲伤”，且程度为强烈", time: '今天 08:15', status: 'untreated' },
+        { id: 'a3', studentId: '2023020', name: '郑六', type: '心理预警', level: 'high', reason: "连续7天情绪为“悲伤”，且程度为强烈", time: '昨天 14:30', status: 'untreated' }
+      ],
+      students: generateStudents(),
+      aiTopics: [
+        { topic: '多巴胺与内啡肽的区别', count: 28, trend: 'up' }, 
+        { topic: '边缘系统的具体功能', count: 22, trend: 'up' }, 
+        { topic: '倒U型压力模型', count: 15, trend: 'same' }, 
+        { topic: '认知行为疗法 CBT', count: 12, trend: 'down' }, 
+        { topic: '杏仁核在恐惧中的作用', count: 11, trend: 'up' }
+      ],
+      interceptLogs: [
+        { id: 'L01', q: "怎么治疗重度抑郁症吃什么药？", time: "今天 10:20", stu: "张三", detail: "学生询问具体处方药。系统已拦截该医疗诊断请求，回复安全声明，引导前往心理辅导中心。" }, 
+        { id: 'L02', q: "期末考试的答案能告诉我吗？", time: "昨天 22:15", stu: "李四", detail: "拒绝提供直接答案，重申学术诚信规则，并提供复习方向建议。" },
+        { id: 'L03', q: "老师的私人电话是多少", time: "10月12日", stu: "王五", detail: "学生询问教师隐私。已拦截，并提供了公开的教务答疑办公时间。" }
+      ],
+      tasks: [
+        { id: 't1', title: 'DASS-21 情绪测试', type: '测评', target: '全班', deadline: '今天 23:59', submitCount: 115, total: 120, status: 'active', colorTheme: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-600', icon: 'text-rose-500' } },
+        { id: 't2', title: '课程前段：主题反思短文', type: '作业', target: '全班', deadline: '10月30日', submitCount: 112, total: 120, status: 'active', colorTheme: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-600', icon: 'text-indigo-500' } },
+        { id: 't3', title: '课程后段：期末总结短文', type: '作业', target: '全班', deadline: '12月20日 23:59', submitCount: 0, total: 120, status: 'upcoming', colorTheme: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-600', icon: 'text-emerald-500' } }
+      ],
+      feedbacks: [
+        { id: 1, date: '昨天 14:30', studentId: '2023005', name: '王五', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=王五&backgroundColor=fef08a', tag: '教学建议', text: '希望老师在讲解多巴胺机制的时候能多举一些生活中的实际案例，感觉纯理论稍微有点抽象。', sentiment: 'neutral', icon: 'lightbulb' }, 
+        { id: 2, date: '10月28日', studentId: '2023012', name: '赵六', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=赵六&backgroundColor=bfdbfe', tag: '课程难度', text: '前段短文的字数要求有点高，最近各科期中考试压力比较大，能不能适当减少一点字数限制呀？', sentiment: 'warning', icon: 'trending_up' }, 
+        { id: 3, date: '10月25日', studentId: '2023001', name: '张子涵', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=张子涵&backgroundColor=f1f5f9', tag: '其他', text: 'AI 助教非常有用！昨晚半夜复习的时候帮我梳理了边缘系统的知识点，特别清晰，五星好评！', sentiment: 'positive', icon: 'chat' }
+      ],
+      syllabusTemplate: Array.from({length: 16}).map((_, i) => ({ id: i+1, title: i===0?'课程导论':i===15?'期末复盘':`核心探讨(第${i+1}讲)`, desc: i===0?'介绍课程基本结构、考核方式与学习目标。':'深入探讨相关机制在实际生活中的应用与案例分析。' })),
+      researchLogs: [{ id: 'r002', type: '多模态音视频特征', date: '2026-10-18', samples: 115, status: 'ready', range: '2026秋季班' }],
+      adminUsers: [
+        { id: 'u101', name: '胡教授', role: '主讲教师', account: 'web_admin_01', type: 'Web用户', status: 'active', creator: '系统内置', updateTime: '2026-04-14 10:25:30' }, 
+        { id: 'u102', name: '张助教', role: '助教', account: 'web_assistant_1', type: 'Web用户', status: 'active', creator: '胡教授', updateTime: '2026-04-12 15:40:12' }
+      ],
+      roles: [
+        { id: 1, name: '超级管理员', code: 'SUPER_ADMIN', desc: '系统最高权限', status: 'active', creator: '系统内置', updateTime: '2026-01-01 00:00:00' }, 
+        { id: 2, name: '主讲教师', code: 'LEAD_TEACHER', desc: '课程全权负责人', status: 'active', creator: 'admin', updateTime: '2026-03-15 14:20:10' }
+      ],
+      menus: [{ id: 'dashboard', name: '工作台概览', icon: 'dashboard' }, { id: 'students', name: '学生花名册', icon: 'groups' }, { id: 'interactive', name: '课堂互动间', icon: 'forum' }, { id: 'analytics', name: '学情分析', icon: 'analytics' }, { id: 'course', name: '教学管理', icon: 'menu_book' }, { id: 'dataManagement', name: '数据管理', icon: 'database' }, { id: 'settings', name: '系统设置', icon: 'settings' }],
+      dicts: [{ id: 1, name: '心理预警等级', code: 'ALERT_LEVEL', items: 4, status: 'active', updateTime: '2026-01-10 10:00:00', desc: '管控层级' }],
+      lessons: Array.from({length: 16}).map((_, i) => {
+        const d = new Date(new Date(2026, 8, 2).getTime() + i * 7 * 24 * 60 * 60 * 1000);
+        return {
+          id: i + 1, title: i === 0 ? '课程导论' : i === 15 ? '期末总结与复盘' : `核心课题探讨 (第 ${i+1} 讲)`,
+          date: `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`,
+          time: '19:00', endTime: '21:00', location: '紫金港西1-201', status: i < 7 ? 'completed' : i === 7 ? 'active' : 'upcoming', onlineCount: 115
+        };
+      }),
+      chatMessages: [
+        { id: 'm1', sender: '张子涵', studentId: '2023001', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=张子涵&backgroundColor=f1f5f9', type: 'text', content: '老师，边缘系统的PPT可以分享一下吗？', time: '19:05', status: 'normal' },
+        { id: 'm2', sender: '李四', studentId: '2023002', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=李四&backgroundColor=fecaca', type: 'text', content: '这也太难了吧，根本听不懂...', time: '19:12', status: 'normal' },
+        { id: 'm3', sender: '王五', studentId: '2023005', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=王五&backgroundColor=fef08a', type: 'text', content: '同问，杏仁核那部分有点快，求老师重讲一下。', time: '19:13', status: 'normal' },
+        { id: 'm4', sender: '胡教授 (我)', studentId: 'Teacher', avatar: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=150&q=80', type: 'text', content: 'PPT课后会上传到资料区。觉得难的同学下课可以留一下。', time: '19:15', status: 'normal' },
+        { id: 'm5', sender: '神秘人', studentId: '2023099', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Shadow&backgroundColor=slate', type: 'text', content: '代写论文加V：123456，保过！', time: '19:20', status: 'normal' },
+        { id: 'm6', sender: '赵六', studentId: '2023012', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=赵六&backgroundColor=bfdbfe', type: 'image', content: 'https://images.unsplash.com/photo-1559757175-5700dde675bc?auto=format&fit=crop&w=300&q=80', time: '19:22', status: 'normal' }
+      ]
+    };
+
+    const Sidebar = ({ activeTab, setActiveTab }) => {
+      const [showProfileMenu, setShowProfileMenu] = useState(false);
+      return (
+        <div className="w-64 bg-slate-900 text-white flex flex-col h-screen shrink-0 shadow-xl z-20 relative">
+          <div className="p-6 flex items-center gap-3 border-b border-slate-800">
+            <img src="hero-brain-network.jpg" onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=150&q=80"; }} alt="Logo" className="w-11 h-11 rounded-xl object-cover shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-indigo-500/30 shrink-0" />
+            <div><h1 className="font-extrabold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-white">AI课程助手</h1><p className="text-[10px] text-slate-400 font-medium">教师端控制台</p></div>
+          </div>
+          <div className="flex-1 py-6 px-4 space-y-2">
+            {MOCK_DATA.menus.map(item => (
+              <button key={item.id} onClick={() => setActiveTab(item.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${activeTab === item.id ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 shadow-inner' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
+                <Icon name={item.icon} className={activeTab === item.id ? 'text-indigo-400' : 'text-slate-500'} />{item.name}
+              </button>
+            ))}
+          </div>
+          <div className="p-4 border-t border-slate-800 relative">
+            {showProfileMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)}></div>
+                <div className="absolute bottom-full left-4 right-4 mb-3 bg-[#1e2330] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 z-50">
+                  <button onClick={() => {setShowProfileMenu(false); alert('修改密码模块开发中');}} className="w-full flex items-center gap-3 px-5 py-4 text-sm text-slate-200 hover:bg-slate-800/80 transition-colors font-medium">
+                    <Icon name="key" style={{fontSize: '18px'}} /> 修改密码
+                  </button>
+                  <div className="h-px bg-slate-700/60 w-full"></div>
+                  <button onClick={() => {setShowProfileMenu(false); alert('已安全退出登录');}} className="w-full flex items-center gap-3 px-5 py-4 text-sm text-rose-400 hover:bg-slate-800/80 transition-colors font-medium">
+                    <Icon name="logout" style={{fontSize: '18px'}} /> 退出登录
+                  </button>
+                </div>
+              </>
+            )}
+            <div className={`flex items-center justify-between px-2 py-2 rounded-xl cursor-pointer transition-colors ${showProfileMenu ? 'bg-slate-800' : 'hover:bg-slate-800'}`} onClick={() => setShowProfileMenu(!showProfileMenu)}>
+              <div className="flex items-center gap-3">
+                <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=150&q=80" alt="Teacher" className="w-9 h-9 rounded-full object-cover border-2 border-slate-700" />
+                <div className="text-left"><p className="text-sm font-bold text-white">胡教授</p><p className="text-[10px] text-slate-400">主讲教师</p></div>
+              </div>
+              <Icon name="unfold_more" className={`transition-transform duration-300 ${showProfileMenu ? 'text-indigo-400 rotate-180' : 'text-slate-500'}`} style={{fontSize: '18px'}} />
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const DashboardView = ({ onOpenStudentProfile, onOpenNewTask, setActiveTab, globalTerm, isReadOnly }) => {
+      const [showAllAlerts, setShowAllAlerts] = useState(false);
+      const [isAlertsEmpty, setIsAlertsEmpty] = useState(false);
+      const [isTasksEmpty, setIsTasksEmpty] = useState(false);
+
+      if (!globalTerm) return (
+        <div className="p-8 h-full flex flex-col items-center justify-center animate-in fade-in">
+           <div className="w-24 h-24 bg-slate-100 text-slate-300 rounded-full flex items-center justify-center mb-6"><Icon name="event_busy" style={{fontSize: '48px'}} /></div>
+           <h2 className="text-2xl font-black text-slate-700 mb-2">当前无任何学期数据</h2>
+           <p className="text-slate-500 mb-8 max-w-md text-center">系统检测到全局没有任何正在运行的学期。请先前往教学管理初始化您的第一个教学实例。</p>
+           <button onClick={() => setActiveTab('course')} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-indigo-700 active:scale-95 transition-all">前往教学管理创建</button>
+        </div>
+      );
+
+      const hasActiveLesson = MOCK_DATA.lessons.some(l => l.status === 'active');
+
+      return (
+        <div className="p-8 h-full overflow-y-auto custom-scrollbar animate-in fade-in duration-500 flex flex-col relative">
+          {isReadOnly && <ReadOnlyBanner />}
+
+          <div className="flex justify-between items-end mb-8 shrink-0">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-800">早上好，胡教授</h2>
+              <p className="text-sm text-slate-500 mt-1">当前查阅学期：<strong className="text-indigo-600">{globalTerm.name}</strong>{!isReadOnly && <span className="ml-1">，请重点关注学生<strong className="text-rose-500 ml-1">心理预警</strong>！</span>}</p>
+            </div>
+            {!isReadOnly && (
+              <div className="flex gap-3">
+                <button onClick={() => setActiveTab('interactive')} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-md shadow-indigo-200 flex items-center gap-2 active:scale-95 relative">
+                  {hasActiveLesson && <span className="absolute -top-1 -right-1 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500 border border-white"></span></span>}
+                  <Icon name="forum" style={{ fontSize: '18px' }}/> 进入课堂互动大屏
+                </button>
+                <button onClick={onOpenNewTask} className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 shadow-sm flex items-center gap-2 active:scale-95"><Icon name="add_task" style={{ fontSize: '18px' }}/> 发布任务/问卷</button>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-4 gap-6 mb-8 shrink-0">
+            {[{ label: isReadOnly ? '最终学期进度' : '本学期进度', val: `${MOCK_DATA.kpis.courseProgress}/${MOCK_DATA.kpis.totalLessons}讲`, icon: 'play_lesson', color: 'blue' }, { label: '历史选课人数', val: MOCK_DATA.kpis.totalStudents, icon: 'groups', color: 'indigo' }, { label: '平均出勤率', val: `${MOCK_DATA.kpis.avgAttendance}%`, icon: 'how_to_reg', color: 'emerald' }, { label: '学生满意度', val: `${MOCK_DATA.kpis.healthIndex}%`, icon: 'sentiment_satisfied', color: 'amber' }].map((kpi, idx) => (
+              <div key={idx} className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex items-center gap-5 relative overflow-hidden group ${isReadOnly ? 'opacity-80' : ''}`}>
+                <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full opacity-10 group-hover:scale-125 transition-transform duration-500 bg-${kpi.color}-500`}></div>
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 bg-${kpi.color}-50 text-${kpi.color}-600 border border-${kpi.color}-100`}><Icon name={kpi.icon} style={{ fontSize: '28px' }} /></div>
+                <div><p className="text-xs font-bold text-slate-400 mb-1">{kpi.label}</p><p className="text-2xl font-black text-slate-800">{kpi.val}</p></div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-6 flex-1 min-h-0">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0 bg-slate-50/50">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2 cursor-pointer select-none transition-opacity hover:opacity-80" onClick={() => setIsAlertsEmpty(!isAlertsEmpty)}>
+                  <span className="relative flex h-3 w-3"><span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isReadOnly ? 'hidden' : 'bg-rose-400'}`}></span><span className={`relative inline-flex rounded-full h-3 w-3 ${isReadOnly ? 'bg-slate-400' : 'bg-rose-500'}`}></span></span>
+                  {isReadOnly ? '历史心理预警快照' : '学生心理预警'}
+                </h3>
+                <button onClick={() => setShowAllAlerts(true)} className="text-xs font-bold px-2 py-1 rounded transition-colors text-indigo-600 hover:underline bg-indigo-50">查看全部预警</button>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                {isAlertsEmpty ? (
+                   <div className="h-full flex flex-col items-center justify-center text-slate-400 animate-in fade-in duration-300"><Icon name="verified_user" style={{fontSize: '36px', opacity: 0.5}} className="mb-2 text-emerald-500"/><p className="text-sm font-bold text-slate-500">暂无心理预警</p></div>
+                ) : (
+                  <>
+                    {MOCK_DATA.alerts.map(alert => (
+                      <div key={alert.id} className="flex items-center justify-between p-4 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors">
+                        <div className="flex items-start gap-4">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-rose-50 text-rose-500`}><Icon name="warning" /></div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1"><span className="text-sm font-bold text-slate-800">{alert.name}</span><span className="text-[10px] text-slate-400">({alert.studentId})</span><span className="text-[10px] px-2 py-0.5 rounded font-bold border bg-rose-50 border-rose-200 text-rose-600">{alert.type}</span></div>
+                            <p className="text-xs text-slate-600">{alert.reason}</p><p className="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1"><Icon name="schedule" style={{fontSize: '12px'}}/> {alert.time}</p>
+                          </div>
+                        </div>
+                        <button onClick={() => onOpenStudentProfile(alert.studentId)} className="shrink-0 bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-50 hover:text-indigo-600 transition-colors flex items-center gap-1 shadow-sm"><Icon name="visibility" style={{fontSize: '14px'}}/> 查看画像</button>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden">
+               <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0 bg-slate-50/50">
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="assignment_turned_in" className="text-indigo-500" />{isReadOnly ? '历史任务最终状态' : '近期任务'}</h3>
+               </div>
+               <div className={`flex-1 overflow-y-auto custom-scrollbar p-6 ${isTasksEmpty ? '' : 'space-y-6'}`}>
+                 {MOCK_DATA.tasks.filter(t => !t.title.includes('课程前段')).map(task => {
+                   const percent = isReadOnly ? 100 : Math.round((task.submitCount / task.total) * 100) || 0;
+                   const submitted = isReadOnly ? task.total : task.submitCount;
+                   return (
+                     <div key={task.id} className="group">
+                       <div className="flex justify-between items-start mb-2">
+                         <div><span className="text-sm font-bold text-slate-700 block group-hover:text-indigo-600 transition-colors">{task.title}</span><span className="text-[10px] text-slate-400 mt-0.5 block flex items-center gap-1"><span className={`px-1.5 py-0.5 rounded border ${task.colorTheme.bg} ${task.colorTheme.border} ${task.colorTheme.text}`}>{task.type}</span>{isReadOnly ? '已结束' : `截止: ${task.deadline}`}</span></div>
+                         <div className="text-right shrink-0"><span className={`text-sm font-black ${percent < 50 ? 'text-rose-500' : percent < 80 ? 'text-amber-500' : 'text-emerald-500'}`}>{percent}%</span><span className="text-[10px] text-slate-400 block mt-0.5">{submitted}/{task.total} 人已交</span></div>
+                       </div>
+                       <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${percent < 50 ? 'bg-rose-500' : percent < 80 ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{width: `${percent}%`}}></div></div>
+                     </div>
+                   );
+                 })}
+               </div>
+            </div>
+          </div>
+          
+          {showAllAlerts && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-8">
+               <div className="bg-white w-[900px] max-w-full h-[85vh] rounded-2xl shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl shrink-0">
+                    <div><h2 className="text-xl font-extrabold text-slate-800 flex items-center gap-2"><Icon name="warning" className="text-rose-500"/> 学生心理预警台账</h2></div>
+                    <button onClick={() => setShowAllAlerts(false)} className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"><Icon name="close" style={{fontSize: '18px'}} /></button>
+                  </div>
+                  <div className="flex-1 overflow-hidden flex flex-col p-6 bg-white">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar border border-slate-200 rounded-xl">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                          <tr className="text-xs font-bold text-slate-500 uppercase tracking-wider"><th className="p-4">预警对象</th><th className="p-4">预警类型</th><th className="p-4">触发原因</th><th className="p-4 text-right">操作</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {MOCK_DATA.allAlertsHistory.map(alert => (
+                            <tr key={alert.id} className="hover:bg-slate-50/50">
+                              <td className="p-4"><div className="font-bold text-slate-700 text-sm">{alert.name}</div></td>
+                              <td className="p-4"><span className="text-[10px] px-2 py-0.5 rounded font-bold border bg-rose-50 text-rose-600 border-rose-200">{alert.type}</span></td>
+                              <td className="p-4 text-xs text-slate-600">{alert.reason}</td>
+                              <td className="p-4 text-right"><button onClick={() => { setShowAllAlerts(false); onOpenStudentProfile(alert.studentId); }} className="text-indigo-600 font-bold text-xs">查看画像</button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+               </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const StudentsView = ({ onOpenStudentProfile, isReadOnly }) => {
+      const [searchTerm, setSearchTerm] = useState('');
+      const [statusFilter, setStatusFilter] = useState('all');
+      const [currentPage, setCurrentPage] = useState(1);
+      const pageSize = 10;
+
+      const filteredStudents = useMemo(() => MOCK_DATA.students.filter(student => (student.name.includes(searchTerm) || student.id.includes(searchTerm)) && (statusFilter === 'all' || student.status === statusFilter)), [searchTerm, statusFilter]);
+
+      const totalPages = Math.ceil(filteredStudents.length / pageSize);
+      const paginatedStudents = useMemo(() => {
+        const startIndex = (currentPage - 1) * pageSize;
+        return filteredStudents.slice(startIndex, startIndex + pageSize);
+      }, [filteredStudents, currentPage]);
+
+      useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter]);
+
+      return (
+        <div className="p-8 h-full overflow-y-auto custom-scrollbar animate-in fade-in duration-500 flex flex-col">
+          {isReadOnly && <ReadOnlyBanner />}
+
+          <div className="flex justify-between items-end mb-6 shrink-0">
+            <div><h2 className="text-2xl font-extrabold text-slate-800">学生花名册</h2></div>
+            <div className="flex items-center gap-3">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium shadow-sm">
+                <option value="all">全部分类状态</option><option value="normal">健康平稳</option><option value="warning">情绪波动</option><option value="alert">心理预警</option>
+              </select>
+              <div className="relative">
+                <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" style={{fontSize: '18px'}} />
+                <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="搜索姓名或学号..." className="pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64 shadow-sm" />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                  <tr className="text-xs font-bold text-slate-500 uppercase tracking-wider"><th className="p-4 pl-6">学生</th><th className="p-4">学号</th><th className="p-4">专业</th><th className="p-4 text-center">{isReadOnly ? '最终出勤率' : '出勤率'}</th><th className="p-4 text-center">综合画像评估</th><th className="p-4 text-right pr-6">操作</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedStudents.map(student => (
+                    <tr key={student.id} className="hover:bg-indigo-50/30 transition-colors group cursor-pointer" onClick={() => onOpenStudentProfile(student.id)}>
+                      <td className="p-4 pl-6"><div className="flex items-center gap-3"><img src={student.avatar} alt={student.name} className="w-10 h-10 rounded-full object-cover shadow-sm bg-slate-100" /><span className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors">{student.name}</span></div></td>
+                      <td className="p-4 text-sm text-slate-500 font-mono">{student.id}</td><td className="p-4 text-sm text-slate-500">{student.major}</td>
+                      <td className="p-4"><div className="flex items-center justify-center gap-2"><div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${student.attendance < 80 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{width: `${student.attendance}%`}}></div></div><span className="text-xs font-bold text-slate-600 w-8">{student.attendance}%</span></div></td>
+                      <td className="p-4 text-center">{student.status === 'normal' ? <span className="inline-flex bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">健康平稳</span> : student.status === 'warning' ? <span className="inline-flex bg-amber-50 text-amber-600 border border-amber-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">情绪波动</span> : <span className="inline-flex bg-rose-50 text-rose-600 border border-rose-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">心理预警</span>}</td>
+                      <td className="p-4 text-right pr-6"><button className="text-indigo-600 hover:text-indigo-800 text-sm font-bold flex items-center justify-end gap-1 w-full transition-colors">查看画像 <Icon name="chevron_right" style={{fontSize:'16px'}} /></button></td>
+                    </tr>
+                  ))}
+                  {paginatedStudents.length === 0 && <tr><td colSpan="6" className="p-8 text-center text-slate-500 text-sm">未找到匹配的学生</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="p-5 border-t border-slate-200 bg-white flex items-center justify-between shrink-0 rounded-b-2xl">
+              <div className="text-sm text-slate-500 font-medium">共查询到 <strong className="text-indigo-600 font-bold px-1">{filteredStudents.length}</strong> 名学生</div>
+              <div className="flex items-center gap-4">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-full border border-slate-200 bg-white text-slate-600 text-sm font-bold hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"><Icon name="chevron_left" style={{fontSize:'18px'}}/> 上一页</button>
+                <span className="text-sm font-medium text-slate-500">第 <strong className="text-slate-800 font-bold">{currentPage} / {totalPages || 1}</strong> 页</span>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="px-4 py-2 rounded-full border border-slate-200 bg-white text-slate-600 text-sm font-bold hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1">下一页 <Icon name="chevron_right" style={{fontSize:'18px'}}/></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const BehaviorTrack = ({ label, value, unit, min, max, normalMin, normalMax, normalMedian }) => {
+       const toPct = (val) => Math.min(100, Math.max(0, ((val - min) / (max - min)) * 100));
+       const normMinPct = toPct(normalMin);
+       const normMaxPct = toPct(normalMax);
+       const normMedPct = toPct(normalMedian);
+       const valPct = toPct(value);
+
+       const isNormal = value >= normalMin && value <= normalMax;
+       const isWarning = value >= normalMin * 0.7 && value <= normalMax * 1.3 && !isNormal;
+       const dotColor = isNormal ? 'bg-emerald-500 border-emerald-100' : isWarning ? 'bg-amber-500 border-amber-100' : 'bg-rose-500 border-rose-100';
+
+       return (
+         <div className="flex items-center gap-4 text-sm group">
+           <div className="w-16 font-bold text-slate-600 shrink-0 text-right">{label}</div>
+           <div className="flex-1 relative h-3 bg-slate-100 rounded-full flex items-center shadow-inner">
+             <div className="absolute h-full bg-emerald-100/70 border-x border-emerald-200/70" style={{ left: `${normMinPct}%`, width: `${normMaxPct - normMinPct}%` }} title={`正常区间: ${normalMin} - ${normalMax} ${unit}`}></div>
+             <div className="absolute w-[2px] h-4 bg-emerald-400 z-10 rounded-full" style={{ left: `${normMedPct}%`, transform: 'translateX(-50%)' }} title={`健康中位数: ${normalMedian} ${unit}`}></div>
+             <div className={`absolute w-4 h-4 ${dotColor} rounded-full z-20 shadow-md border-2 transition-all duration-1000 group-hover:scale-125 cursor-help`} style={{ left: `${valPct}%`, transform: 'translateX(-50%)' }} title={`当前值: ${value} ${unit}`}></div>
+           </div>
+           <div className="w-20 font-black text-slate-700 shrink-0 text-left pl-1">{value} <span className="text-[10px] text-slate-400 font-bold">{unit}</span></div>
+         </div>
+       );
+    };
+
+    const StudentProfileDrawer = ({ studentId, onClose }) => {
+      const student = useMemo(() => MOCK_DATA.students.find(s => s.id === studentId), [studentId]);
+      if (!student) return null;
+
+      const emotionText = student.status === 'alert' ? "近7天连续呈现「悲伤」等强烈负向情绪" : student.status === 'warning' ? "近7天呈现间歇性「愤怒、恐惧」波动" : "近7天以「快乐」等积极情绪为主";
+      const emotionLogs = student.status === 'alert' ? [{ state: 'neutral', score: 3 }, { state: 'bad', score: 4 }, { state: 'bad', score: 5 }, { state: 'bad', score: 5 }, { state: 'bad', score: 5 }, { state: 'bad', score: 4 }, { state: 'bad', score: 5 }] : student.status === 'warning' ? [{ state: 'good', score: 3 }, { state: 'good', score: 2 }, { state: 'neutral', score: 4 }, { state: 'neutral', score: 5 }, { state: 'bad', score: 2 }, { state: 'neutral', score: 3 }, { state: 'good', score: 4 }] : [{ state: 'good', score: 3 }, { state: 'good', score: 5 }, { state: 'good', score: 4 }, { state: 'neutral', score: 1 }, { state: 'good', score: 3 }, { state: 'good', score: 4 }, { state: 'good', score: 5 }];
+
+      const getScoreLabel = (score) => { if (score >= 4) return '强烈'; if (score >= 2) return '中等'; return '轻微'; };
+
+      const dassScore = student.status === 'alert' ? 28 : student.status === 'warning' ? 16 : 6;
+      const dassLevel = student.status === 'alert' ? '重度风险' : student.status === 'warning' ? '中度风险' : '正常范围';
+      const dassColor = student.status === 'alert' ? 'rose' : student.status === 'warning' ? 'amber' : 'emerald';
+
+      const multiScore = student.status === 'alert' ? 45 : student.status === 'warning' ? 72 : 94;
+      const multiLevel = student.status === 'alert' ? '高压异常' : student.status === 'warning' ? '轻度疲劳' : '体征平稳';
+      const multiColor = student.status === 'alert' ? 'rose' : student.status === 'warning' ? 'amber' : 'emerald';
+
+      const behaviorData = { sleep: student.status === 'alert' ? 4.2 : 7.8, steps: student.status === 'alert' ? 1250 : 8600, social: student.status === 'alert' ? 0.3 : 2.5 };
+      const behaviorText = student.status === 'alert' ? `严重偏离：日均睡眠严重不足(${behaviorData.sleep}h)，社交与活动量极度匮乏，提示社会退缩倾向。` : student.status === 'warning' ? `存在波动：睡眠略低于中位数(${behaviorData.sleep}h)，步数与社交时长呈下降趋势。` : "节律规律：各项日常行为数据均位于健康区间附近，无明显偏离。";
+
+      return (
+        <div className="fixed inset-0 z-[150] flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
+          <div className="relative w-[700px] max-w-full bg-white h-full shadow-2xl flex flex-col animate-slide-in">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50 shrink-0">
+              <div className="flex gap-4 items-center">
+                <img src={student.avatar} alt="avatar" className="w-16 h-16 rounded-2xl object-cover shadow-sm border border-slate-200 bg-slate-100" />
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">{student.name} <span className="text-xs text-slate-500 font-mono bg-slate-200/50 px-2 py-0.5 rounded">{student.id}</span></h2>
+                  <p className="text-sm text-slate-500 font-medium mt-1">{student.major}</p>
+                </div>
+              </div>
+              <button onClick={onClose} className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"><Icon name="close" style={{fontSize: '18px'}} /></button>
+            </div>
+
+            <div className="px-6 flex gap-6 border-b border-slate-100 shrink-0">
+              <button className="py-4 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600"><span className="flex items-center gap-1"><Icon name="radar" style={{fontSize:'16px'}}/> 学生综合画像</span></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-white p-6 space-y-6">
+                  <div className={`border-l-4 rounded-r-xl p-5 ${student.status === 'alert' ? 'border-rose-500 bg-rose-50' : student.status === 'warning' ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
+                    <div className="flex items-center gap-2 mb-3 relative">
+                      <h3 className={`text-sm font-bold flex items-center gap-2 ${student.status === 'alert' ? 'text-rose-800' : student.status === 'warning' ? 'text-amber-800' : 'text-emerald-800'}`}>
+                         <Icon name="analytics" /> AI 综合评估建议
+                      </h3>
+                      <div className="relative group flex items-center cursor-help">
+                        <Icon name="info" style={{fontSize: '18px'}} className="text-slate-400 hover:text-indigo-500 transition-colors" />
+                        <div className="absolute left-0 top-full mt-2 w-96 bg-[#1e2330] text-slate-200 text-xs p-5 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] font-normal leading-relaxed text-left border border-slate-700/50">
+                          <h4 className="flex items-center gap-2 text-indigo-300 text-sm font-bold border-b border-slate-700/50 pb-3 mb-3"><Icon name="science" style={{fontSize: '16px'}}/> 五维画像评估计算说明</h4>
+                          <div className="space-y-3">
+                             <p><span className="text-emerald-400 font-bold">出勤表现：</span>基于全局 LBS 电子围栏打卡的异常缺卡次数进行递减扣分统计。</p>
+                             <p><span className="text-rose-400 font-bold">情绪状况：</span>呈现连续7天的情绪打卡记录。绿色代表快乐，黄色代表愤怒/厌恶/恐惧，红色代表悲伤。</p>
+                             <p><span className="text-purple-400 font-bold">多模态特征：</span>深度融合语音声纹压力、面部微表情等生理特征的综合稳定性评分。</p>
+                             <p><span className="text-blue-400 font-bold">DASS量表评分：</span>基于最新一次 DASS-21（抑郁-焦虑-压力）测评量表的客观得分。</p>
+                             <p><span className="text-amber-400 font-bold">日常行为：</span>采集智能穿戴设备及校园系统授权数据，对比健康作息区间及中位数，直观展示睡眠、步数、社交时长的偏离情况。</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className={`text-sm space-y-2.5 ${student.status === 'alert' ? 'text-rose-700' : student.status === 'warning' ? 'text-amber-700' : 'text-emerald-700'}`}>
+                      <p className="flex items-start gap-2"><Icon name="fiber_manual_record" className="mt-1 shrink-0" style={{fontSize: '10px'}}/> <span><strong>出勤表现：</strong> 当前出勤率 {student.attendance}%。</span></p>
+                      <p className="flex items-start gap-2"><Icon name="fiber_manual_record" className="mt-1 shrink-0" style={{fontSize: '10px'}}/> <span><strong>情绪状况：</strong> {emotionText}。</span></p>
+                      <p className="flex items-start gap-2"><Icon name="fiber_manual_record" className="mt-1 shrink-0" style={{fontSize: '10px'}}/> <span><strong>多模态特征：</strong> 综合生理评估得分 {multiScore}/100，处于{multiLevel}。</span></p>
+                      <p className="flex items-start gap-2"><Icon name="fiber_manual_record" className="mt-1 shrink-0" style={{fontSize: '10px'}}/> <span><strong>DASS量表评分：</strong> 最新得分为 {dassScore}分，属于{dassLevel}。</span></p>
+                      <p className="flex items-start gap-2"><Icon name="fiber_manual_record" className="mt-1 shrink-0" style={{fontSize: '10px'}}/> <span><strong>日常行为：</strong> {behaviorText}</span></p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                     <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2"><Icon name="donut_small" className="text-indigo-500" /> 核心量化指标监控</h3>
+                     <div className="grid grid-cols-3 gap-4">
+                       {[
+                         { key: 'attendance', label: '出勤表现', desc: 'LBS打卡统计', val: `${student.attendance}%`, color: 'emerald', icon: 'how_to_reg', barVal: student.attendance },
+                         { key: 'multimodal', label: '多模态特征', desc: multiLevel, val: `${multiScore}分`, color: multiColor, icon: 'record_voice_over', barVal: multiScore },
+                         { key: 'dass', label: 'DASS量表', desc: dassLevel, val: `${dassScore}分`, color: dassColor, icon: 'assignment_late', barVal: Math.max(10, 100 - dassScore * 2.5) },
+                       ].map(dim => (
+                         <div key={dim.key} className="bg-white rounded-xl p-3 border border-slate-200 shadow-sm relative overflow-hidden group flex flex-col hover:border-indigo-300 transition-colors cursor-default">
+                           <div className={`absolute -right-4 -top-4 w-12 h-12 rounded-full opacity-10 bg-${dim.color}-500 group-hover:scale-150 transition-transform duration-500`}></div>
+                           <div className="flex items-center gap-2 mb-2 relative z-10">
+                             <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-${dim.color}-50 text-${dim.color}-600`}><Icon name={dim.icon} style={{ fontSize: '16px' }} /></div>
+                             <div><h4 className="text-xs font-bold text-slate-800">{dim.label}</h4><p className="text-[10px] text-slate-400 mt-0.5">{dim.desc}</p></div>
+                           </div>
+                           <div className="mt-auto pt-1 relative z-10">
+                             <span className={`text-base font-black text-${dim.color}-600 mb-1 block`}>{dim.val}</span>
+                             <div className="w-full bg-slate-100 rounded-full h-1"><div className={`h-full bg-${dim.color}-500 rounded-full`} style={{width: `${dim.barVal}%`}}></div></div>
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                     <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm overflow-hidden group">
+                        <div className="flex justify-between items-center mb-4">
+                           <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Icon name="mood" className="text-rose-500" style={{ fontSize: '18px' }}/> 情绪状况 (近7天)</h4>
+                           <div className="flex items-center gap-3 text-[10px] font-medium text-slate-500">
+                             <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-emerald-400 rounded-[3px]"></div> 快乐</span>
+                             <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-amber-400 rounded-[3px]"></div> 恐惧等波动</span>
+                             <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-rose-500 rounded-[3px]"></div> 悲伤</span>
+                           </div>
+                        </div>
+                        <div className="flex justify-between items-center gap-2">
+                           {emotionLogs.map((log, i) => (
+                              <div key={i} title={`情绪强度: 级别${log.score}`} className={`h-11 relative flex-1 rounded-lg border flex items-center justify-center hover:scale-105 transition-transform cursor-help ${log.state === 'bad' ? 'bg-rose-500 border-rose-600 text-rose-100' : log.state === 'neutral' ? 'bg-amber-400 border-amber-500 text-amber-900' : 'bg-emerald-400 border-emerald-500 text-emerald-900'}`}>
+                                 <span className="absolute top-0.5 right-1.5 text-[9px] font-black opacity-70">{log.score}</span>
+                                 <span className="text-[10px] font-bold opacity-90 mt-2">前{7-i}天</span>
+                              </div>
+                           ))}
+                        </div>
+                     </div>
+
+                     <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
+                        <h4 className="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-3 flex items-center gap-2"><Icon name="bedtime" className="text-indigo-500" style={{ fontSize: '18px' }}/> 日常行为偏离追踪</h4>
+                        <div className="space-y-5 pt-1 pb-2 px-2">
+                          <BehaviorTrack label="日均睡眠" value={behaviorData.sleep} unit="h" min={0} max={12} normalMin={7} normalMax={9} normalMedian={8} />
+                          <BehaviorTrack label="日均步数" value={behaviorData.steps} unit="步" min={0} max={15000} normalMin={5000} normalMax={10000} normalMedian={7500} />
+                          <BehaviorTrack label="社交时长" value={behaviorData.social} unit="h" min={0} max={8} normalMin={2} normalMax={4} normalMedian={3} />
+                        </div>
+                     </div>
+                  </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const AnalyticsView = ({ onOpenStudentProfile, isReadOnly }) => {
+      const topAiTopics = MOCK_DATA.aiTopics;
+      const maxCount = Math.max(...topAiTopics.map(t => t.count));
+      const [selectedLog, setSelectedLog] = useState(null); 
+      const [showAllLogsModal, setShowAllLogsModal] = useState(false);
+      const [showAllFeedbacksModal, setShowAllFeedbacksModal] = useState(false);
+
+      return (
+        <div className="p-8 h-full overflow-y-auto custom-scrollbar animate-in fade-in duration-500 relative bg-slate-50/50 flex flex-col">
+          {isReadOnly && <ReadOnlyBanner />}
+          <div className="mb-8 shrink-0">
+              <h2 className="text-2xl font-extrabold text-slate-800">学情分析</h2>
+              <p className="text-sm text-slate-500 mt-1">多维度聚合班级知识盲区及学生真实的教学反馈建议。</p>
+          </div>
+          <div className="grid grid-cols-2 gap-6 mb-6 shrink-0">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+              <div className="flex justify-between items-center mb-5 shrink-0">
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Icon name="smart_toy" className="text-indigo-500" /> {isReadOnly ? '历史高频提问知识点' : '近一周高频提问知识点'}</h3>
+              </div>
+              <div className="flex-1 space-y-5">
+                {topAiTopics.map((topic, idx) => (
+                  <div key={idx}>
+                    <div className="flex justify-between items-end mb-1">
+                      <span className="text-sm font-bold text-slate-700">{idx + 1}. {topic.topic}</span>
+                      <span className="text-xs text-slate-500 flex items-center gap-1">被问 {topic.count} 次 {topic.trend === 'up' ? <Icon name="trending_up" className="text-rose-500" style={{fontSize:'14px'}}/> : topic.trend === 'down' ? <Icon name="trending_down" className="text-emerald-500" style={{fontSize:'14px'}}/> : <Icon name="trending_flat" className="text-slate-400" style={{fontSize:'14px'}}/>}</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2"><div className="bg-indigo-400 h-full rounded-full transition-all duration-1000" style={{width: `${(topic.count / maxCount) * 100}%`}}></div></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+               <div>
+                 <h3 className="text-base font-bold text-slate-800 mb-2 flex items-center gap-2"><Icon name="shield_lock" className="text-rose-500" /> 学术边界拦截日志</h3>
+                 <p className="text-xs text-slate-500 mb-4 shrink-0">尝试突破教材大纲范围或违规的提问拦截。</p>
+                 <div className="space-y-3 mt-3 flex-1">
+                  {MOCK_DATA.interceptLogs.map((log, idx) => (
+                    <div key={idx} className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 flex items-start justify-between cursor-pointer group hover:border-rose-200 transition-colors" onClick={() => setSelectedLog(log)}>
+                      <div className="flex items-start gap-3 overflow-hidden">
+                        <Icon name="block" className="text-rose-400 shrink-0 mt-0.5" style={{fontSize:'16px'}}/>
+                        <div className="overflow-hidden"><p className="text-sm font-medium text-slate-800 truncate w-64">"{log.q}"</p><p className="text-[10px] text-slate-400 mt-1">拦截对象: {log.stu} · {log.time}</p></div>
+                      </div>
+                      <Icon name="chevron_right" className="text-slate-300 group-hover:text-rose-400 shrink-0 mt-2" style={{fontSize: '18px'}}/>
+                    </div>
+                  ))}
+                 </div>
+               </div>
+               <button onClick={() => setShowAllLogsModal(true)} className="w-full mt-4 py-2.5 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors border border-indigo-100 shadow-sm">查看详细拦截记录 (共 10 条)</button>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex-1">
+              <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-4">
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Icon name="forum" className="text-amber-500" /> 学生反馈与建议</h3>
+                <button onClick={() => setShowAllFeedbacksModal(true)} className="text-xs text-indigo-600 font-bold hover:bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm transition-colors">查看全部记录</button>
+              </div>
+              <div className="grid grid-cols-3 gap-5">
+                {MOCK_DATA.feedbacks.map(fb => (
+                  <div key={fb.id} className="bg-slate-50 border border-slate-100 rounded-xl p-5 relative flex flex-col group hover:shadow-md hover:border-indigo-200 transition-all">
+                     <div className={`absolute right-0 top-0 w-16 h-16 rounded-full opacity-10 -translate-y-1/2 translate-x-1/2 ${fb.sentiment === 'positive' ? 'bg-emerald-500' : fb.sentiment === 'warning' ? 'bg-amber-500' : 'bg-blue-500'}`}></div>
+                     <div className="flex justify-between items-start mb-3 relative z-10">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${fb.sentiment === 'positive' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : fb.sentiment === 'warning' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}><Icon name={fb.icon} style={{fontSize: '12px'}}/> {fb.tag}</span>
+                        <span className="text-[10px] text-slate-400">{fb.date}</span>
+                     </div>
+                     <p className="text-sm text-slate-700 leading-relaxed mb-4 flex-1 relative z-10">"{fb.text}"</p>
+                     <div className="flex items-center justify-between border-t border-slate-100 pt-3 relative z-10 mt-auto">
+                        <div className="flex items-center gap-2 cursor-pointer hover:text-indigo-600" onClick={() => onOpenStudentProfile(fb.studentId)}>
+                          <img src={fb.avatar} alt="avatar" className="w-6 h-6 rounded-full object-cover border border-slate-200 shadow-sm bg-slate-100" />
+                          <span className="text-xs font-bold text-slate-700">{fb.name}</span>
+                        </div>
+                     </div>
+                  </div>
+                ))}
+              </div>
+          </div>
+
+          {showAllLogsModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-8">
+               <div className="bg-white w-[800px] max-w-full h-[80vh] rounded-2xl shadow-2xl flex flex-col">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-rose-50 rounded-t-2xl">
+                    <h2 className="text-xl font-extrabold text-rose-800 flex items-center gap-2"><Icon name="shield_lock" /> 学术边界拦截台账</h2>
+                    <button onClick={() => setShowAllLogsModal(false)} className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-rose-500 hover:bg-rose-100"><Icon name="close" style={{fontSize: '18px'}} /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50/50">
+                      <table className="w-full text-left border-collapse bg-white rounded-xl shadow-sm overflow-hidden">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr className="text-[11px] font-bold text-slate-500 uppercase"><th className="p-4">拦截时间</th><th className="p-4">提问学生</th><th className="p-4">原始 Prompt</th><th className="p-4">状态</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {MOCK_DATA.interceptLogs.map((log, idx) => (
+                            <tr key={idx} className="hover:bg-rose-50/30 cursor-pointer" onClick={() => setSelectedLog(log)}>
+                              <td className="p-4 text-xs text-slate-500 whitespace-nowrap">{log.time}</td>
+                              <td className="p-4 text-sm font-bold text-indigo-600">{log.stu}</td>
+                              <td className="p-4 text-sm text-slate-700">"{log.q}"</td>
+                              <td className="p-4"><span className="text-[10px] text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">已阻断</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {showAllFeedbacksModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-8">
+               <div className="bg-white w-[900px] max-w-full h-[80vh] rounded-2xl shadow-2xl flex flex-col">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                    <h2 className="text-xl font-extrabold text-slate-800 flex items-center gap-2"><Icon name="forum" className="text-amber-500"/> 全部学生反馈与建议</h2>
+                    <button onClick={() => setShowAllFeedbacksModal(false)} className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-500 hover:bg-slate-100"><Icon name="close" style={{fontSize: '18px'}} /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50/50">
+                      <div className="grid grid-cols-2 gap-4">
+                        {MOCK_DATA.feedbacks.map(fb => (
+                          <div key={fb.id} className="bg-white border border-slate-200 rounded-xl p-5 relative flex flex-col">
+                             <div className="flex justify-between items-start mb-3 relative z-10">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${fb.sentiment === 'positive' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : fb.sentiment === 'warning' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}><Icon name={fb.icon} style={{fontSize: '12px'}}/> {fb.tag}</span>
+                                <span className="text-[10px] text-slate-400">{fb.date}</span>
+                             </div>
+                             <p className="text-sm text-slate-700 leading-relaxed mb-4 flex-1">"{fb.text}"</p>
+                             <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-auto">
+                                <div className="flex items-center gap-2 cursor-pointer hover:text-indigo-600" onClick={() => { setShowAllFeedbacksModal(false); onOpenStudentProfile(fb.studentId); }}>
+                                  <img src={fb.avatar} alt="avatar" className="w-8 h-8 rounded-full object-cover border border-slate-200 shadow-sm bg-slate-100" />
+                                  <span className="text-xs font-bold text-slate-700">{fb.name}</span>
+                                </div>
+                                {!isReadOnly && <button className="text-xs text-indigo-600 font-bold bg-indigo-50 px-3 py-1.5 rounded hover:bg-indigo-100">记录跟进</button>}
+                             </div>
+                          </div>
+                        ))}
+                      </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {selectedLog && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/40 p-8">
+               <div className="bg-white w-[500px] max-w-full rounded-2xl shadow-2xl flex flex-col animate-in zoom-in-95">
+                  <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-rose-50 rounded-t-2xl">
+                    <h2 className="text-base font-extrabold text-rose-800 flex items-center gap-2"><Icon name="shield_lock" /> 拦截事件详情</h2>
+                    <button onClick={() => setSelectedLog(null)} className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-rose-500 hover:bg-rose-100"><Icon name="close" style={{fontSize: '18px'}} /></button>
+                  </div>
+                  <div className="p-6 space-y-4">
+                     <div><span className="text-[10px] font-bold text-slate-400 block mb-1">提问学生</span><p className="text-sm font-bold text-indigo-600">{selectedLog.stu}</p></div>
+                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><span className="text-[10px] font-bold text-slate-400 block mb-1">原始 Prompt</span><p className="text-sm text-slate-800 italic">"{selectedLog.q}"</p></div>
+                     <div><span className="text-[10px] font-bold text-slate-400 block mb-1">AI 处置结果</span><p className="text-sm text-slate-700 leading-relaxed bg-rose-50/50 p-4 rounded-xl border border-rose-100">{selectedLog.detail}</p></div>
+                  </div>
+               </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const InteractiveRoomView = ({ isReadOnly }) => {
+      const [viewMode, setViewMode] = useState('list'); 
+      const [activeLesson, setActiveLesson] = useState(null);
+      const [messages, setMessages] = useState(MOCK_DATA.chatMessages);
+      
+      const [isAllMuted, setIsAllMuted] = useState(false);
+      const [mutedStudents, setMutedStudents] = useState([]);
+      const [showAnnounceModal, setShowAnnounceModal] = useState(false);
+      const [announceText, setAnnounceText] = useState('');
+      const [pinnedAnnouncement, setPinnedAnnouncement] = useState(null); 
+      
+      const [chatInput, setChatInput] = useState('');
+      const [muteConfirm, setMuteConfirm] = useState(null); 
+      const [showClearConfirm, setShowClearConfirm] = useState(false);
+      const [showEndClassConfirm, setShowEndClassConfirm] = useState(false);
+      const chatEndRef = useRef(null);
+
+      const interactiveList = MOCK_DATA.lessons.map(lesson => ({
+        ...lesson,
+        status: isReadOnly ? 'ended' : (lesson.status === 'completed' ? 'ended' : lesson.status),
+        onlineCount: isReadOnly || lesson.status === 'completed' ? 115 : lesson.status === 'active' ? 112 : 0
+      }));
+
+      useEffect(() => {
+        if (viewMode === 'detail' && activeLesson?.status === 'active' && !isReadOnly) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [messages, viewMode, activeLesson, isReadOnly]);
+
+      const handleEnterRoom = (lesson) => { setActiveLesson(lesson); setViewMode('detail'); setMessages(MOCK_DATA.chatMessages); };
+
+      const handleSendChat = (e) => {
+        e.preventDefault();
+        if(chatInput.trim() && !isReadOnly) {
+          setMessages(prev => [...prev, { id: 'msg_t_' + Date.now(), sender: '胡教授 (我)', studentId: 'Teacher', avatar: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=150&q=80', type: 'text', content: chatInput, status: 'normal', time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}) }]);
+          setChatInput('');
+        }
+      };
+
+      const handleSendAnnounce = () => {
+        if(announceText.trim() && !isReadOnly) {
+          const newAnnounce = { id: 'ann_' + Date.now(), sender: '全屏系统公告', studentId: 'Admin', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Admin&backgroundColor=6366f1', type: 'announce', content: announceText, status: 'normal', time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}) };
+          setMessages(prev => [...prev, newAnnounce]);
+          setPinnedAnnouncement(newAnnounce); 
+          setAnnounceText(''); setShowAnnounceModal(false);
+        }
+      };
+
+      const handleMuteStudent = () => {
+        if (muteConfirm && !isReadOnly) {
+          if (!mutedStudents.find(s => s.id === muteConfirm.id)) {
+            setMutedStudents(prev => [...prev, muteConfirm]);
+            setMessages(prev => [...prev, { id: 'sys_' + Date.now(), sender: '系统管理员', studentId: 'System', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Admin&backgroundColor=f43f5e', type: 'sys', content: `已将学生 [${muteConfirm.name}] 禁言`, status: 'normal', time: new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'}) }]);
+          }
+          setMuteConfirm(null);
+        }
+      };
+
+      if (viewMode === 'detail' && activeLesson) {
+        const isEnded = isReadOnly || activeLesson.status === 'ended';
+        return (
+          <div className="flex flex-col h-full bg-slate-100 animate-in fade-in relative">
+            <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 shadow-sm z-10">
+              <div className="flex items-center gap-4">
+                <button onClick={() => setViewMode('list')} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"><Icon name="arrow_back" style={{fontSize: '20px'}}/></button>
+                <div>
+                  <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">{activeLesson.title}{(isReadOnly || activeLesson.status === 'ended') && <span className="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded">历史记录</span>}</h2>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 flex overflow-hidden">
+               <div className={`flex flex-col bg-slate-50/50 border-r border-slate-200 relative ${isEnded ? 'w-full' : 'w-2/3'}`}>
+                  <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center shrink-0 z-20">
+                     <h3 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="forum" className="text-indigo-500" style={{fontSize: '18px'}}/> 互动公屏</h3>
+                     {!isEnded ? <span className="text-xs text-slate-400">鼠标悬浮可管控违规消息</span> : <span className="text-xs text-slate-400 font-bold bg-slate-100 px-2 py-1 rounded">当前为只读历史记录</span>}
+                  </div>
+
+                  {pinnedAnnouncement && (
+                     <div className="bg-indigo-50/95 backdrop-blur-md border-b border-indigo-100 p-4 flex justify-between items-start shrink-0 shadow-sm z-10 transition-all duration-300 animate-in slide-in-from-top-4">
+                        <div className="flex items-start gap-3">
+                          <div className="bg-indigo-100 text-indigo-500 w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-inner"><Icon name="push_pin" style={{fontSize: '18px'}}/></div>
+                          <div><span className="text-[10px] font-bold text-indigo-400 mb-1 block uppercase tracking-widest">置顶公告 · {pinnedAnnouncement.time}</span><p className="text-sm font-bold text-indigo-900 leading-relaxed">{pinnedAnnouncement.content}</p></div>
+                        </div>
+                        {!isEnded && <button onClick={() => setPinnedAnnouncement(null)} className="text-indigo-400 hover:text-indigo-600 p-1.5 bg-white/60 rounded-lg hover:bg-white ml-4"><Icon name="close" style={{fontSize: '16px'}}/></button>}
+                     </div>
+                  )}
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                     {messages.map(msg => (
+                       <div key={msg.id} className="flex items-start gap-3 group">
+                          {msg.type === 'sys' || msg.type === 'announce' ? (
+                             <div className="w-full flex justify-center my-2"><div className={`px-4 py-2 rounded-xl text-center shadow-sm border ${msg.type === 'sys' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}><p className="text-sm font-bold">{msg.content}</p></div></div>
+                          ) : (
+                            <>
+                              <img src={msg.avatar} alt="avatar" className="w-10 h-10 rounded-xl object-cover border border-slate-200 shadow-sm mt-1 bg-slate-100" />
+                              <div className="flex-1 max-w-[80%]">
+                                 <div className="flex items-baseline gap-2 mb-1"><span className="text-xs font-bold text-slate-700">{msg.sender}</span><span className="text-[10px] text-slate-400 font-mono">{msg.studentId}</span><span className="text-[10px] text-slate-300 ml-2">{msg.time}</span></div>
+                                 <div className="flex items-center gap-3">
+                                   <div className={`relative rounded-2xl px-4 py-2.5 text-sm shadow-sm ${msg.status === 'retracted' ? 'bg-slate-100 text-slate-400 italic border border-slate-200' : 'bg-white border border-indigo-100 text-slate-800'}`}>
+                                     {msg.status === 'retracted' ? '该消息已被撤回' : (msg.type === 'text' ? msg.content : <img src={msg.content} className="max-w-[200px] rounded-lg" />)}
+                                   </div>
+                                   {!isEnded && msg.status !== 'retracted' && (
+                                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+                                        <button onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: 'retracted' } : m))} title="撤回消息" className="w-7 h-7 rounded flex items-center justify-center text-slate-500 hover:text-rose-500 hover:bg-rose-50"><Icon name="delete_sweep" style={{fontSize: '16px'}}/></button>
+                                        <div className="w-px h-4 bg-slate-200 mx-0.5"></div>
+                                        <button onClick={() => setMuteConfirm({id: msg.studentId, name: msg.sender})} title="禁言该生" className="w-7 h-7 rounded flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-amber-50"><Icon name="voice_over_off" style={{fontSize: '16px'}}/></button>
+                                      </div>
+                                   )}
+                                 </div>
+                              </div>
+                            </>
+                          )}
+                       </div>
+                     ))}
+                     <div ref={chatEndRef} />
+                  </div>
+                  
+                  {!isEnded && (
+                    <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+                       <form onSubmit={handleSendChat} className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus-within:border-indigo-500 transition-all">
+                         <Icon name="add_circle" className="text-slate-400 hover:text-indigo-500 cursor-pointer" style={{fontSize: '24px'}} />
+                         <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="作为教师参与公屏讨论..." className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700" />
+                         <button type="submit" disabled={!chatInput.trim()} className={`w-8 h-8 rounded-lg flex items-center justify-center shadow-sm ${chatInput.trim() ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}><Icon name="send" style={{fontSize: '16px'}} /></button>
+                       </form>
+                    </div>
+                  )}
+               </div>
+
+               {!isEnded && (
+                 <div className="flex-1 bg-white p-6">
+                    <div className="space-y-8">
+                       <div>
+                         <h3 className="text-sm font-bold text-slate-800 mb-4">场控工具</h3>
+                         <div className="grid grid-cols-2 gap-3 mb-8">
+                           <button onClick={() => setIsAllMuted(!isAllMuted)} className={`p-4 rounded-xl border transition-colors flex flex-col items-center gap-2 shadow-sm ${isAllMuted ? 'border-rose-500 bg-rose-500 text-white shadow-rose-200' : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'}`}><Icon name={isAllMuted ? "mic_off" : "mic"} style={{fontSize: '24px'}} /><span className="text-xs font-bold">{isAllMuted ? '解除全员禁言' : '全员禁言'}</span></button>
+                           <button onClick={() => setShowAnnounceModal(true)} className="p-4 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors flex flex-col items-center gap-2 shadow-sm"><Icon name="campaign" style={{fontSize: '24px'}} /><span className="text-xs font-bold">发布全屏公告</span></button>
+                           <button onClick={() => setShowClearConfirm(true)} className="p-4 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 flex flex-col items-center gap-2 shadow-sm"><Icon name="clear_all" style={{fontSize: '24px'}} /><span className="text-xs font-bold">一键清屏</span></button>
+                           <button onClick={() => setShowEndClassConfirm(true)} className="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 flex flex-col items-center gap-2 shadow-sm"><Icon name="power_settings_new" style={{fontSize: '24px'}} /><span className="text-xs font-bold">强制结课</span></button>
+                         </div>
+                       </div>
+                       
+                       <div className="flex-1 flex flex-col min-h-[300px]">
+                         <div className="flex justify-between items-center mb-3">
+                           <h3 className="text-sm font-bold text-slate-800">小黑屋 (已禁言名单)</h3>
+                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-400">{mutedStudents.length} 人</span>
+                         </div>
+                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 h-64 overflow-y-auto custom-scrollbar shadow-inner">
+                            {mutedStudents.length === 0 ? (
+                              <div className="flex flex-col items-center justify-center h-full text-slate-400"><Icon name="verified_user" style={{fontSize: '32px', opacity: 0.5}} className="mb-2 text-emerald-500" /><p className="text-xs font-bold">暂无禁言学生</p></div>
+                            ) : (
+                              mutedStudents.map(stu => (
+                                <div key={stu.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm mb-2 animate-in fade-in">
+                                   <div className="flex items-center gap-2"><Icon name="person_off" className="text-rose-400" style={{fontSize: '18px'}}/><span className="text-xs font-bold text-slate-700">{stu.name}</span></div>
+                                   <button onClick={() => setMutedStudents(prev => prev.filter(s => s.id !== stu.id))} className="text-xs border border-indigo-200 bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-100 font-bold shadow-sm">解禁</button>
+                                </div>
+                              ))
+                            )}
+                         </div>
+                       </div>
+                    </div>
+                 </div>
+               )}
+            </div>
+
+            {showAnnounceModal && (
+              <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-8">
+                 <div className="bg-white w-[500px] rounded-3xl p-8 shadow-2xl">
+                    <h2 className="font-black text-indigo-900 flex items-center gap-2 mb-6"><Icon name="campaign" className="text-indigo-500" /> 发布公告并置顶</h2>
+                    <textarea rows="4" value={announceText} onChange={(e) => setAnnounceText(e.target.value)} placeholder="请输入公告内容..." className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none mb-6"></textarea>
+                    <div className="flex gap-3"><button onClick={() => setShowAnnounceModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">取消</button><button onClick={handleSendAnnounce} disabled={!announceText.trim()} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg">发布</button></div>
+                 </div>
+              </div>
+            )}
+            {muteConfirm && (
+              <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-8">
+                 <div className="bg-white w-[400px] rounded-3xl p-8 text-center shadow-2xl">
+                    <p className="mb-6 font-bold text-slate-700">确定要对学生 <strong className="text-indigo-600">{muteConfirm.name}</strong> 禁言吗？</p>
+                    <div className="flex gap-3"><button onClick={() => setMuteConfirm(null)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">取消</button><button onClick={handleMuteStudent} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">确认禁言</button></div>
+                 </div>
+              </div>
+            )}
+            {showClearConfirm && (
+              <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-8">
+                 <div className="bg-white w-[400px] rounded-3xl p-8 text-center shadow-2xl">
+                    <p className="mb-6 font-bold text-slate-700">确定要清空前端公屏吗？</p>
+                    <div className="flex gap-3"><button onClick={() => setShowClearConfirm(false)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">取消</button><button onClick={() => {setMessages([]); setShowClearConfirm(false);}} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">确认</button></div>
+                 </div>
+              </div>
+            )}
+            {showEndClassConfirm && (
+              <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-8">
+                 <div className="bg-white w-[400px] rounded-3xl p-8 text-center shadow-2xl">
+                    <p className="mb-6 font-bold text-slate-700">强制结课后不可逆，确定吗？</p>
+                    <div className="flex gap-3"><button onClick={() => setShowEndClassConfirm(false)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">取消</button><button onClick={() => {setActiveLesson({...activeLesson, status: 'ended'}); setShowEndClassConfirm(false);}} className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold">结课</button></div>
+                 </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      return (
+        <div className="p-8 h-full overflow-y-auto custom-scrollbar animate-in fade-in flex flex-col">
+          {isReadOnly && <ReadOnlyBanner />}
+          <h2 className="text-2xl font-extrabold text-slate-800 mb-6 shrink-0">课堂互动间</h2>
+          <div className="flex-1 flex flex-col gap-4 pr-2">
+             {interactiveList.map(lesson => (
+               <div key={lesson.id} className={`bg-white border border-slate-200 rounded-2xl p-6 flex items-center justify-between transition-shadow group ${lesson.status === 'active' ? 'shadow-md border-indigo-200' : 'hover:shadow-md'}`}>
+                 <div className="flex items-center gap-5">
+                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${lesson.status === 'active' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-400'}`}>
+                     <Icon name="forum" style={{fontSize: '28px'}} />
+                   </div>
+                   <div>
+                     <div className="flex items-center gap-3 mb-1.5">
+                       {lesson.status === 'ended' && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">已结课</span>}
+                       {lesson.status === 'active' && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-50 text-rose-500 border border-rose-200 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span> 上课中</span>}
+                       {lesson.status === 'upcoming' && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-500 border border-blue-200">待开课</span>}
+                       <h3 className="text-lg font-bold text-slate-800">{lesson.title}</h3>
+                     </div>
+                     <p className="text-sm text-slate-500 flex items-center gap-4">
+                        <span className="flex items-center gap-1"><Icon name="schedule" style={{fontSize: '16px'}}/> {lesson.date} {lesson.time}</span>
+                        {lesson.status === 'active' && <span className="flex items-center gap-1 text-emerald-600 font-medium"><Icon name="group" style={{fontSize: '16px'}}/> 在线 {lesson.onlineCount} 人</span>}
+                     </p>
+                   </div>
+                 </div>
+                 <button disabled={lesson.status === 'upcoming'} onClick={() => handleEnterRoom(lesson)} className={`px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-1.5 transition-colors ${lesson.status === 'active' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 hover:bg-indigo-700 active:scale-95' : lesson.status === 'ended' ? 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200' : 'bg-slate-50 border border-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                   {lesson.status === 'active' ? <><Icon name="login" style={{fontSize: '18px'}}/> 进入互动监控大屏</> : lesson.status === 'ended' ? <><Icon name="history" style={{fontSize: '18px'}}/> 查看公屏记录</> : <><Icon name="hourglass_empty" style={{fontSize: '18px'}}/> 未到开始时间</>}
+                 </button>
+               </div>
+             ))}
+          </div>
+        </div>
+      );
+    };
+
+    const DataManagementView = () => (
+      <div className="p-8 h-full overflow-y-auto custom-scrollbar animate-in fade-in duration-500 flex flex-col">
+        <div className="mb-6 shrink-0"><h2 className="text-2xl font-extrabold text-slate-800">数据管理</h2></div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm mb-6 shrink-0">
+          <div className="grid grid-cols-3 gap-6 items-end">
+            <div><label className="block text-xs font-bold text-slate-600 mb-1.5">所属学期/届次</label><select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option>当前学期 (2026秋季班)</option></select></div>
+            <div><label className="block text-xs font-bold text-slate-600 mb-1.5">数据类型</label><select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option>全部类型</option></select></div>
+            <div><button className="w-full bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:bg-indigo-700 active:scale-95 flex items-center justify-center gap-1"><Icon name="search" style={{fontSize: '18px'}}/> 查询数据</button></div>
+          </div>
+        </div>
+        <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50"><h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Icon name="list_alt" className="text-slate-400"/> 可导出数据批次列表</h3></div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase"><tr><th className="p-4">批次号</th><th className="p-4">数据类别</th><th className="p-4">生成日期</th><th className="p-4">所属学期</th><th className="p-4 text-center">样本量</th><th className="p-4 text-center">状态</th><th className="p-4 text-right">操作</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {MOCK_DATA.researchLogs.map(log => (
+                  <tr key={log.id} className="hover:bg-indigo-50/30 transition-colors">
+                    <td className="p-4 font-mono text-sm text-slate-500">{log.id}</td><td className="p-4 font-bold text-slate-700 text-sm">{log.type}</td><td className="p-4 text-sm text-slate-500">{log.date}</td>
+                    <td className="p-4 text-sm text-slate-600"><span className="bg-slate-100 px-2 py-1 rounded text-xs">{log.range}</span></td><td className="p-4 text-center font-bold text-slate-700">{log.samples}</td>
+                    <td className="p-4 text-center"><span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200"><Icon name="check_circle" style={{fontSize:'12px'}}/> 就绪</span></td>
+                    <td className="p-4 text-right"><button className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center justify-end w-full gap-1"><Icon name="download" style={{fontSize:'16px'}} /> 下载</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+
+    const SettingsView = () => {
+      const [settingTab, setSettingTab] = useState('users'); 
+      return (
+        <div className="p-8 h-full overflow-y-auto custom-scrollbar animate-in fade-in duration-500 flex gap-8">
+          <div className="w-64 shrink-0 space-y-2">
+            <h2 className="text-2xl font-extrabold text-slate-800 mb-6">系统设置</h2>
+            <div className="space-y-1">
+               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-4 mb-2">系统管理 (RBAC)</p>
+               {[{ id: 'users', label: '用户管理', icon: 'manage_accounts' }, { id: 'roles', label: '角色管理', icon: 'admin_panel_settings' }, { id: 'menus', label: '菜单管理', icon: 'segment' }, { id: 'dicts', label: '字典管理', icon: 'book' }].map(tab => (
+                 <button key={tab.id} onClick={() => setSettingTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 text-sm font-bold ${settingTab === tab.id ? 'bg-white text-indigo-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200/50'}`}><Icon name={tab.icon} /> {tab.label}</button>
+               ))}
+            </div>
+          </div>
+          <div className="flex-1 bg-slate-50 rounded-2xl border border-slate-200 shadow-inner overflow-hidden flex flex-col p-4">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {settingTab === 'users' && (
+                <div className="space-y-4 h-full flex flex-col">
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
+                    <div className="p-4 flex justify-between items-center border-b border-slate-100 shrink-0">
+                      <div className="flex items-center gap-2"><div className="w-1.5 h-4 bg-indigo-500 rounded-sm"></div><span className="font-bold text-slate-800 text-sm">账号列表</span></div>
+                      <div className="flex items-center gap-3"><button className="bg-indigo-600 text-white px-5 py-1.5 rounded-lg text-xs font-bold">新增</button><button className="bg-white border text-slate-600 px-5 py-1.5 rounded-lg text-xs font-bold">删除</button></div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                          <tr className="text-[13px] font-bold text-slate-600"><th className="p-4 w-12"></th><th className="p-4">序号</th><th className="p-4">用户名</th><th className="p-4">角色</th><th className="p-4">状态</th><th className="p-4">操作</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {MOCK_DATA.adminUsers.map((user, idx) => (
+                            <tr key={user.id} className="hover:bg-slate-50/50">
+                              <td className="p-4 text-center"><input type="checkbox" className="rounded" /></td><td className="p-4 text-sm text-slate-500">{idx + 1}</td>
+                              <td className="p-4 text-sm font-bold text-slate-800">{user.name} <span className="font-mono text-slate-500 text-xs font-normal">({user.account})</span></td>
+                              <td className="p-4 text-sm text-slate-600">{user.role}</td><td className="p-4 text-sm text-emerald-600 font-bold">启用</td>
+                              <td className="p-4 text-sm"><button className="text-indigo-600 hover:text-indigo-800 font-bold mr-3">编辑</button><button className="text-slate-400 hover:text-amber-500 font-bold">密码重置</button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {settingTab === 'roles' && (
+                <div className="space-y-4 h-full flex flex-col">
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
+                    <div className="p-4 flex justify-between items-center border-b border-slate-100 shrink-0">
+                      <div className="flex items-center gap-2"><div className="w-1.5 h-4 bg-indigo-500 rounded-sm"></div><span className="font-bold text-slate-800 text-sm">角色列表</span></div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200"><tr className="text-[13px] font-bold text-slate-600"><th className="p-4 w-12"></th><th className="p-4">角色名称</th><th className="p-4">编码</th><th className="p-4">职能描述</th><th className="p-4">操作</th></tr></thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {MOCK_DATA.roles.map((role) => (
+                            <tr key={role.id} className="hover:bg-slate-50/50"><td className="p-4 text-center"><input type="checkbox" className="rounded" /></td><td className="p-4 text-sm font-bold text-indigo-700">{role.name}</td><td className="p-4 text-sm font-mono text-slate-500">{role.code}</td><td className="p-4 text-sm text-slate-600">{role.desc}</td><td className="p-4 text-sm"><button className="text-indigo-600 hover:text-indigo-800 font-bold mr-3">分配权限</button></td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {(settingTab === 'menus' || settingTab === 'dicts') && <div className="h-full flex items-center justify-center text-slate-400 font-bold">该设置模块正在建设中...</div>}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const CourseAndTasksView = ({ onOpenNewTask, globalTermId, setGlobalTermId, terms, setTerms }) => {
+      const [subTab, setSubTab] = useState('info'); 
+      const [showArchiveModal, setShowArchiveModal] = useState(false);
+      const [showNewTermModal, setShowNewTermModal] = useState(false);
+      const [showBlockModal, setShowBlockModal] = useState(false);
+      
+      const [newTermName, setNewTermName] = useState('');
+      const [newInviteCode, setNewInviteCode] = useState('');
+      
+      const [isScheduleLocked, setIsScheduleLocked] = useState(true);
+      const [showScheduleConfirmModal, setShowScheduleConfirmModal] = useState(false);
+      
+      const [showSyllabusModal, setShowSyllabusModal] = useState(false);
+      const [showCopyConfirmModal, setShowCopyConfirmModal] = useState(false);
+
+      const [showEditInfoModal, setShowEditInfoModal] = useState(false);
+      const [editForm, setEditForm] = useState({ name: '', courseName: '', location: '' });
+
+      const activeTermExists = terms.some(t => t.status === 'active');
+      const selectedTerm = terms.find(t => t.id === globalTermId);
+      const isReadOnly = selectedTerm?.status !== 'active';
+
+      const [localSyllabus, setLocalSyllabus] = useState([]);
+      const [showBatchInput, setShowBatchInput] = useState(false);
+      const [batchText, setBatchText] = useState('');
+
+      const [scheduleRules, setScheduleRules] = useState({
+        startDate: selectedTerm?.startDate || '2026-09-02', dayOfWeek: '3', startTime: '19:00', endTime: '21:00', location: '紫金港西1-201'
+      });
+      const [scheduleList, setScheduleList] = useState([]);
+
+      useEffect(() => {
+        if(selectedTerm) {
+          setLocalSyllabus(MOCK_DATA.syllabusTemplate);
+          setScheduleList(MOCK_DATA.lessons.map((l, i) => ({ id: l.id, lessonId: i + 1, title: l.title, desc: MOCK_DATA.syllabusTemplate[i]?.desc || '', date: l.date, startTime: l.time, endTime: l.endTime, location: l.location })));
+          setScheduleRules(prev => ({...prev, startDate: selectedTerm.startDate}));
+          setEditForm({
+            name: selectedTerm.name || '',
+            courseName: selectedTerm.courseName || '双脑与心理健康',
+            location: selectedTerm.location || '紫金港西1-201'
+          });
+        }
+      }, [globalTermId, selectedTerm]);
+
+      useEffect(() => {
+        if(showNewTermModal) {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+          let res = '';
+          for (let i = 0; i < 6; i++) { res += chars.charAt(Math.floor(Math.random() * chars.length)); }
+          setNewInviteCode(`MIND-2026-${res}`);
+        }
+      }, [showNewTermModal]);
+
+      const handleGenerateSchedule = () => {
+         let currentDate = new Date(scheduleRules.startDate);
+         const list = localSyllabus.map((item, idx) => {
+            const d = new Date(currentDate.getTime() + idx * 7 * 24 * 60 * 60 * 1000);
+            const dateStr = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+            return { id: item.id, lessonId: idx + 1, title: item.title, desc: item.desc, date: dateStr, startTime: scheduleRules.startTime, endTime: scheduleRules.endTime, location: scheduleRules.location };
+         });
+         setScheduleList(list); setIsScheduleLocked(true); setShowScheduleConfirmModal(false);
+      };
+
+      const handleBatchAddSyllabus = () => {
+         const lines = batchText.split('\n').filter(l => l.trim() !== '');
+         if (lines.length > 0) {
+           const newItems = lines.map((l, i) => ({ id: Date.now() + i, title: l.trim(), desc: '' }));
+           setLocalSyllabus([...localSyllabus, ...newItems]);
+           setBatchText(''); setShowBatchInput(false);
+         }
+      };
+
+      const handleSyllabusTitleChange = (id, value) => {
+        setLocalSyllabus(prev => prev.map(item => item.id === id ? { ...item, title: value } : item));
+      };
+
+      const handleSyllabusDescChange = (id, value) => {
+        setLocalSyllabus(prev => prev.map(item => item.id === id ? { ...item, desc: value } : item));
+      };
+
+      const handleDeleteSyllabusItem = (id) => {
+        setLocalSyllabus(prev => prev.filter(item => item.id !== id));
+      };
+
+      const handleSaveInfo = () => {
+         if (!editForm.name.trim()) return alert('学期名称不能为空！');
+         const updatedTerms = terms.map(t => 
+           t.id === selectedTerm.id ? { ...t, name: editForm.name, courseName: editForm.courseName, location: editForm.location } : t
+         );
+         setTerms(updatedTerms);
+         setShowEditInfoModal(false);
+      };
+
+      return (
+        <div className="p-8 h-full overflow-y-auto custom-scrollbar animate-in fade-in duration-500 flex flex-col relative">
+          <div className="mb-8 shrink-0 flex justify-between items-start">
+            <div>
+               <h2 className="text-2xl font-extrabold text-slate-800">教学管理</h2>
+               <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-slate-200 inline-flex gap-1 mt-4">
+                 <button onClick={() => setSubTab('info')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${subTab === 'info' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}><Icon name="info" style={{fontSize: '18px'}}/> 1. 学期与班级信息</button>
+                 <button onClick={() => setSubTab('schedule')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${subTab === 'schedule' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}><Icon name="event_note" style={{fontSize: '18px'}}/> 2. 统一排期 & 考勤</button>
+                 <button onClick={() => setSubTab('tasks')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${subTab === 'tasks' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}><Icon name="assignment" style={{fontSize: '18px'}}/> 3. 任务 & 测评发布</button>
+               </div>
+            </div>
+          </div>
+
+          {subTab === 'info' && (
+            <div className="flex-1 flex gap-6 overflow-hidden">
+              <div className="w-2/3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2">
+                {selectedTerm ? (
+                  <>
+                    <div className={`border rounded-3xl p-8 relative overflow-hidden shrink-0 shadow-sm transition-all ${isReadOnly ? 'bg-slate-100 border-slate-200 opacity-90' : 'bg-indigo-50 border-indigo-100'}`}>
+                      <div className={`absolute right-0 top-0 w-48 h-48 opacity-5 rounded-full -translate-y-1/2 translate-x-1/2 ${isReadOnly ? 'bg-slate-500' : 'bg-indigo-500'}`}></div>
+                      
+                      {!isReadOnly && (
+                        <button onClick={() => setShowEditInfoModal(true)} className="absolute top-6 right-6 px-4 py-2 bg-white/60 hover:bg-white text-indigo-600 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-1 z-20">
+                          <Icon name="edit" style={{fontSize: '16px'}}/> 编辑信息
+                        </button>
+                      )}
+
+                      <div className="mb-8 relative z-10">
+                        {isReadOnly ? <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-3 py-1 rounded-full uppercase mb-3 inline-flex items-center gap-1 shadow-sm"><Icon name="lock" style={{fontSize: '12px'}}/> 只读模式 (已归档)</span>
+                                    : <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-3 py-1 rounded-full uppercase mb-3 inline-block animate-pulse shadow-sm">当前运行学期</span>}
+                        <h3 className={`text-3xl font-extrabold mb-2 ${isReadOnly ? 'text-slate-700' : 'text-indigo-900'}`}>{selectedTerm.name}</h3>
+                        <div className={`flex items-center gap-4 text-sm font-medium ${isReadOnly ? 'text-slate-500' : 'text-indigo-700/80'}`}>
+                          <span className="flex items-center gap-1"><Icon name="menu_book" style={{fontSize: '16px'}}/> 课程名称：{selectedTerm.courseName || '双脑与心理健康'}</span><span className={`w-1 h-1 rounded-full ${isReadOnly ? 'bg-slate-400' : 'bg-indigo-300'}`}></span>
+                          <span className="flex items-center gap-1"><Icon name="location_on" style={{fontSize: '16px'}}/> 地点：{selectedTerm.location || '紫金港西1-201'}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4 relative z-10">
+                        <div className={`bg-white rounded-2xl p-5 border shadow-sm flex justify-between items-center ${isReadOnly ? 'border-slate-200' : 'border-indigo-100'}`}>
+                            <div>
+                              <p className={`text-sm font-bold flex items-center gap-1 ${isReadOnly ? 'text-slate-700' : 'text-indigo-900'}`}><Icon name="format_list_numbered" style={{fontSize: '18px'}}/> 本学期课程大纲</p>
+                              <p className="text-[10px] text-slate-500 mt-1">当前共设 {localSyllabus.length} 讲。排期与考勤将以此大纲为准自动生成。</p>
+                            </div>
+                            <button onClick={() => setShowSyllabusModal(true)} className={`border px-5 py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0 ${isReadOnly ? 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100' : 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700'}`}>
+                              {isReadOnly ? '查看大纲' : '编辑大纲'} <Icon name="chevron_right" style={{fontSize: '16px'}}/>
+                            </button>
+                        </div>
+                        <div className={`bg-white rounded-2xl p-5 border shadow-sm flex justify-between items-center ${isReadOnly ? 'border-slate-200' : 'border-indigo-100'}`}>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">本班级专属邀请码</label>
+                            <p className="text-[10px] text-slate-400">新生首次登录小程序需凭此码绑定班级。</p>
+                          </div>
+                          <div className="flex gap-2 items-center">
+                            <input type="text" defaultValue={selectedTerm.inviteCode} readOnly className={`w-48 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base font-mono font-black focus:outline-none tracking-widest text-center ${isReadOnly ? 'text-slate-500' : 'text-indigo-700'}`} />
+                            <button onClick={() => setShowCopyConfirmModal(true)} className={`px-5 py-2.5 rounded-xl transition-colors shadow-md font-bold shrink-0 ${isReadOnly ? 'bg-slate-200 text-slate-500 hover:bg-slate-300' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>复制</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {!isReadOnly && (
+                      <div className="bg-white border border-rose-100 rounded-3xl p-6 shadow-sm flex justify-between items-center mt-auto shrink-0 relative overflow-hidden group">
+                        <div className="absolute left-0 top-0 w-1.5 h-full bg-rose-500"></div>
+                        <div className="pl-4">
+                          <h3 className="text-base font-black text-rose-600 flex items-center gap-2 mb-1"><Icon name="warning" style={{fontSize: '20px'}}/> 结课与归档</h3>
+                          <p className="text-xs text-slate-500">将当前学期设为只读，停止所有自动化通知并永久封存数据，此操作不可逆。</p>
+                        </div>
+                        <button onClick={() => setShowArchiveModal(true)} className="bg-rose-50 border border-rose-200 text-rose-600 px-6 py-3 rounded-xl text-sm font-bold hover:bg-rose-500 hover:text-white transition-all shadow-sm active:scale-95 shrink-0">结课并永久归档</button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-12 shrink-0 flex flex-col items-center justify-center text-center h-full">
+                    <div className="w-24 h-24 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-6"><Icon name="event_busy" style={{fontSize: '48px'}} /></div>
+                    <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full uppercase tracking-wider mb-4 inline-block">空窗期</span>
+                    <h3 className="text-3xl font-extrabold text-slate-700 mb-2">暂无任何数据</h3>
+                    <p className="text-sm text-slate-500 max-w-md mx-auto mb-8 leading-relaxed">系统检测到无任何可用的教学实例，请点击“开启新学期”进行初始化。</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="w-1/3 bg-white rounded-3xl border border-slate-200 shadow-sm flex flex-col overflow-hidden shrink-0">
+                <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                  <h3 className="font-bold text-slate-700">教学学期列表</h3>
+                  <button onClick={() => activeTermExists ? setShowBlockModal(true) : setShowNewTermModal(true)} className="text-indigo-600 hover:text-indigo-800 text-sm font-bold flex items-center gap-1"><Icon name="add_circle" style={{fontSize: '16px'}}/> 开启新学期</button>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
+                  {terms.map(term => (
+                    <div key={term.id} onClick={() => setGlobalTermId(term.id)} className={`p-4 rounded-xl border transition-all cursor-pointer ${globalTermId === term.id ? 'border-indigo-400 bg-indigo-50/50 shadow-sm ring-1 ring-indigo-400' : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50'}`}>
+                      <div className="flex justify-between items-center">
+                        <span className={`font-bold text-sm ${term.status === 'active' ? 'text-indigo-700' : 'text-slate-700'}`}>{term.name}</span>
+                        {term.status === 'active' && <span className="text-[10px] text-emerald-600 bg-emerald-100 font-bold border border-emerald-200 px-2 py-0.5 rounded">进行中</span>}
+                        {term.status === 'archived' && <span className="text-[10px] text-slate-500 bg-slate-100 font-bold border border-slate-200 px-2 py-0.5 rounded">已归档</span>}
+                      </div>
+                    </div>
+                  ))}
+                  {terms.length === 0 && <p className="text-center text-xs text-slate-400 py-8">暂无任何学期</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {subTab === 'schedule' && (
+            selectedTerm ? (
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+                {isReadOnly && (
+                  <div className="bg-slate-100 border border-slate-200 text-slate-600 px-5 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm shrink-0">
+                    <Icon name="lock" style={{fontSize: '18px'}}/> 当前查看的历史学期处于「只读模式」，无法修改排期规则或生成新的考勤表。
+                  </div>
+                )}
+
+                <div className={`rounded-3xl border shadow-sm p-8 transition-colors duration-500 ${isScheduleLocked || isReadOnly ? 'bg-white border-slate-200' : 'bg-indigo-50/20 border-indigo-200 shadow-md'}`}>
+                  <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-5">
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                         统一排期与考勤规则
+                         {(isScheduleLocked || isReadOnly) && <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded flex items-center gap-1 border border-slate-200"><Icon name="lock" style={{fontSize: '12px'}}/> 锁定/只读</span>}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1">基于当前设定的<strong className="text-indigo-600">「本学期课程大纲」</strong>结合时间配置，将自动生成本学期的具体授课日历。</p>
+                    </div>
+                    {!isReadOnly && (
+                      isScheduleLocked ? (
+                        <button onClick={() => setIsScheduleLocked(false)} className="bg-indigo-50 border border-indigo-100 text-indigo-600 px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-all flex items-center gap-2 shadow-sm active:scale-95"><Icon name="edit" style={{fontSize: '18px'}}/> 激活编辑规则</button>
+                      ) : (
+                        <button onClick={() => setIsScheduleLocked(true)} className="text-slate-500 hover:text-slate-700 text-sm font-bold px-3 flex items-center gap-1"><Icon name="lock" style={{fontSize: '16px'}}/> 重新锁定</button>
+                      )
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-8">
+                    <section className={isScheduleLocked || isReadOnly ? 'opacity-80' : ''}>
+                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Icon name="event_repeat" className="text-indigo-500"/> 统一上课时间规则</h4>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                           <div><label className="block text-xs font-bold text-slate-500 mb-1.5">开课日期</label><input type="date" value={scheduleRules.startDate} onChange={e=>setScheduleRules({...scheduleRules, startDate: e.target.value})} disabled={isScheduleLocked || isReadOnly} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" /></div>
+                           <div>
+                             <label className="block text-xs font-bold text-slate-500 mb-1.5">上课日</label>
+                             <select value={scheduleRules.dayOfWeek} onChange={e=>setScheduleRules({...scheduleRules, dayOfWeek: e.target.value})} disabled={isScheduleLocked || isReadOnly} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500">
+                               <option value="1">星期一</option><option value="2">星期二</option><option value="3">星期三</option><option value="4">星期四</option><option value="5">星期五</option><option value="6">星期六</option><option value="0">星期日</option>
+                             </select>
+                           </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div><label className="block text-xs font-bold text-slate-500 mb-1.5">上课时间</label><input type="time" value={scheduleRules.startTime} onChange={e=>setScheduleRules({...scheduleRules, startTime: e.target.value})} disabled={isScheduleLocked || isReadOnly} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" /></div>
+                           <div><label className="block text-xs font-bold text-slate-500 mb-1.5">下课时间</label><input type="time" value={scheduleRules.endTime} onChange={e=>setScheduleRules({...scheduleRules, endTime: e.target.value})} disabled={isScheduleLocked || isReadOnly} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" /></div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className={isScheduleLocked || isReadOnly ? 'opacity-80' : ''}>
+                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Icon name="location_on" className="text-emerald-500"/> 全局 LBS 电子围栏打卡</h4>
+                      <div className={`rounded-2xl p-5 border space-y-5 transition-colors ${isScheduleLocked || isReadOnly ? 'bg-slate-50 border-slate-200' : 'bg-emerald-50/30 border-emerald-100'}`}>
+                        <div className="flex justify-between items-center">
+                           <label className="block text-xs font-bold text-slate-600">强制校验位置打卡</label>
+                           <label className={`relative ${isScheduleLocked || isReadOnly ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                             <input type="checkbox" className="sr-only" defaultChecked disabled={isScheduleLocked || isReadOnly} />
+                             <div className="block bg-emerald-500 w-8 h-4 rounded-full"></div>
+                             <div className="dot absolute right-1 top-0.5 bg-white w-3 h-3 rounded-full transition"></div>
+                           </label>
+                        </div>
+                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">打卡中心点 (地图定位)</label>
+                           <div className="flex gap-3">
+                             <div className={`flex-1 bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center gap-3 ${isScheduleLocked || isReadOnly ? 'opacity-70' : ''}`}>
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isScheduleLocked || isReadOnly ? 'bg-slate-200 text-slate-500' : 'bg-emerald-100 text-emerald-600'}`}><Icon name="person_pin_circle" style={{fontSize: '24px'}} /></div>
+                                <div><p className="text-sm font-bold text-slate-700">{scheduleRules.location}</p><p className="text-[10px] text-slate-400 font-mono mt-0.5">120.08°E, 30.30°N</p></div>
+                             </div>
+                             <button disabled={isScheduleLocked || isReadOnly} className={`border rounded-lg px-4 text-xs font-bold flex flex-col items-center justify-center shrink-0 shadow-sm transition-all ${isScheduleLocked || isReadOnly ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 active:scale-95'}`}><Icon name="map" style={{fontSize: '20px', marginBottom: '2px'}}/> 选点</button>
+                           </div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                  
+                  {!isReadOnly && !isScheduleLocked && (
+                    <div className="mt-8 pt-6 border-t border-indigo-100 flex justify-end">
+                      <button onClick={() => setShowScheduleConfirmModal(true)} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2"><Icon name="event_available" style={{fontSize: '20px'}}/> 生成“排期明细列表”</button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
+                   <div className="flex justify-between items-center mb-6">
+                     <h3 className="text-lg font-bold text-slate-800">排期明细列表 (共 {scheduleList.length} 讲)</h3>
+                     <div className="flex items-center gap-4">
+                       {!isReadOnly && (
+                         <button onClick={() => setShowScheduleConfirmModal(true)} className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm active:scale-95"><Icon name="sync" style={{fontSize: '16px'}}/> 同步最新大纲并重排</button>
+                       )}
+                       <div className="flex items-center gap-1 text-slate-400 border-l border-slate-200 pl-4"><Icon name="table_view" style={{fontSize: '16px'}}/><span className="text-xs font-bold text-slate-500">自动映射生成</span></div>
+                     </div>
+                   </div>
+                   
+                   <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                     <table className="w-full text-left border-collapse">
+                       <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                         <tr><th className="p-4 w-24 text-center">课次</th><th className="p-4 w-1/3">课程大纲/标题</th><th className="p-4">日期</th><th className="p-4">上课时间</th><th className="p-4">下课时间</th><th className="p-4">地点</th></tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-100">
+                         {scheduleList.map((lesson) => (
+                           <tr key={lesson.id} className="hover:bg-slate-50/50 transition-colors">
+                             <td className="p-4 text-center"><span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">第 {lesson.lessonId} 讲</span></td>
+                             <td className="p-4">
+                               <p className="font-bold text-slate-800 text-sm truncate max-w-xs">{lesson.title}</p>
+                               {lesson.desc && <p className="text-[10px] text-slate-500 mt-1 truncate max-w-xs" title={lesson.desc}>{lesson.desc}</p>}
+                             </td>
+                             <td className="p-4 text-sm text-slate-600 font-medium font-mono">{lesson.date}</td>
+                             <td className="p-4 text-sm text-emerald-600 font-bold font-mono">{lesson.startTime}</td>
+                             <td className="p-4 text-sm text-rose-500 font-bold font-mono">{lesson.endTime}</td>
+                             <td className="p-4 text-sm text-slate-600">{lesson.location}</td>
+                           </tr>
+                         ))}
+                         {scheduleList.length === 0 && <tr><td colSpan="6" className="p-8 text-center text-slate-400 text-sm">暂无排期明细数据</td></tr>}
+                       </tbody>
+                     </table>
+                   </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center bg-white border border-slate-200 border-dashed rounded-3xl m-4">
+                 <div className="w-20 h-20 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-4"><Icon name="event_busy" style={{fontSize: '40px'}} /></div>
+                 <h3 className="text-xl font-black text-slate-700 mb-2">暂未选择学期</h3>
+              </div>
+            )
+          )}
+
+          {subTab === 'tasks' && (
+            selectedTerm ? (
+              <div className="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm p-6 overflow-hidden">
+                 <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-slate-800">已发布短文与测评</h3>
+                    {!isReadOnly && <button onClick={onOpenNewTask} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:bg-indigo-700 transition-all flex items-center gap-1 active:scale-95"><Icon name="add" style={{fontSize: '18px'}}/> 发布新任务</button>}
+                 </div>
+                 {isReadOnly && <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg mb-4 text-xs font-bold text-slate-500 flex items-center justify-center gap-2"><Icon name="lock" style={{fontSize:'16px'}}/> 只读模式下无法下发新任务或催交</div>}
+                 
+                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
+                    {MOCK_DATA.tasks.map(task => (
+                      <div key={task.id} className={`p-5 rounded-2xl border flex items-center justify-between group transition-all hover:shadow-md ${task.status === 'completed' || isReadOnly ? 'bg-slate-50 border-slate-200 opacity-70' : `bg-white ${task.colorTheme.border} shadow-sm`}`}>
+                         <div className="flex items-center gap-5">
+                           <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 ${task.colorTheme.bg} ${task.colorTheme.icon}`}><Icon name={task.type === '测评' ? 'psychology' : task.type === '作业' ? 'edit_document' : 'quiz'} style={{fontSize: '28px'}} /></div>
+                           <div>
+                             <div className="flex items-center gap-2 mb-1.5"><span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${task.colorTheme.bg} ${task.colorTheme.border} ${task.colorTheme.text}`}>{task.type}</span><h4 className="text-base font-extrabold text-slate-800">{task.title}</h4></div>
+                             <p className="text-xs text-slate-500 font-medium">发送对象: {task.target} &nbsp;|&nbsp; 截止时间: {task.deadline}</p>
+                           </div>
+                         </div>
+                      </div>
+                    ))}
+                 </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center bg-white border border-slate-200 border-dashed rounded-3xl m-4">
+                 <div className="w-20 h-20 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-4"><Icon name="assignment_late" style={{fontSize: '40px'}} /></div>
+                 <h3 className="text-xl font-black text-slate-700 mb-2">暂无目标学期</h3>
+              </div>
+            )
+          )}
+
+          {/* 所有的模态窗都在这里 */}
+          {showCopyConfirmModal && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-8 text-slate-800">
+               <div className="bg-white w-[420px] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                     <h2 className="font-black text-slate-800 flex items-center gap-2"><Icon name="content_copy" className="text-indigo-500" /> 复制邀请码</h2>
+                     <button onClick={() => setShowCopyConfirmModal(false)}><Icon name="close" className="text-slate-400 hover:text-slate-600 transition-colors" /></button>
+                  </div>
+                  <div className="p-8 text-center">
+                     <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-6"><p className="text-2xl font-black font-mono text-indigo-700 tracking-widest">{selectedTerm.inviteCode}</p></div>
+                     <p className="text-sm text-slate-600 mb-6 leading-relaxed font-medium">分发此邀请码前，请确保本班级的<strong className="text-indigo-600 font-black">学期基本信息</strong>、以及<strong className="text-indigo-600 font-black">统一排期与考勤规则</strong>均已设置完毕！</p>
+                     <button onClick={() => { setShowCopyConfirmModal(false); alert('邀请码已成功复制到剪贴板！'); }} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all active:scale-95 flex items-center justify-center gap-2"><Icon name="check" style={{fontSize:'18px'}}/> 确认没问题，复制</button>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {showArchiveModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-8">
+               <div className="bg-white w-[500px] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 bg-rose-50 border-b border-rose-100 flex justify-between items-center">
+                    <h2 className="font-black text-rose-800 flex items-center gap-2"><Icon name="warning" className="text-rose-500" /> 结课并归档确认</h2>
+                    <button onClick={() => { setShowArchiveModal(false); }}><Icon name="close" className="text-rose-400 hover:text-rose-600 transition-colors" /></button>
+                  </div>
+                  <div className="p-8">
+                      <div className="space-y-5 animate-in fade-in">
+                        <div className="bg-rose-50/50 text-rose-800 p-5 rounded-2xl border border-rose-200 text-sm leading-relaxed">
+                          <p className="font-bold mb-3 text-rose-600">⚠️ 归档操作将引发以下不可逆的业务变化：</p>
+                          <ul className="list-disc pl-5 space-y-2">
+                            <li>立即关闭针对本班级的所有自动化微信通知（含催交、预警）。</li>
+                            <li>停止记录本班级学生的考勤签到与情绪轮盘日历数据。</li>
+                            <li>小程序端与教师端都将自动转为<strong className="font-bold">只读模式</strong>。</li>
+                          </ul>
+                        </div>
+                        <button onClick={() => { setShowArchiveModal(false); alert("归档成功！"); }} className="w-full py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold shadow-lg shadow-rose-200 transition-all active:scale-95">我已充分了解风险，确认归档</button>
+                      </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {showNewTermModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-8">
+               <div className="bg-white w-[600px] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 bg-indigo-50/50 border-b border-indigo-100 flex justify-between items-center">
+                    <h2 className="font-black text-indigo-900 flex items-center gap-2"><Icon name="add_circle" className="text-indigo-600" /> 开启新学期 (创建教学实例)</h2>
+                    <button onClick={() => setShowNewTermModal(false)}><Icon name="close" className="text-slate-400 hover:text-indigo-600 transition-colors" /></button>
+                  </div>
+                  <div className="p-8 space-y-6">
+                     <div className="grid grid-cols-2 gap-5">
+                       <div className="col-span-2">
+                         <label className="block text-xs font-bold text-slate-500 mb-1.5">学期/届次名称 <span className="text-rose-500">*</span></label>
+                         <input type="text" value={newTermName} onChange={e=>setNewTermName(e.target.value)} placeholder="例如：2027春季班" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-slate-800 font-bold" />
+                       </div>
+                       <div className="col-span-2 bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5 flex items-center justify-between mt-2">
+                          <div>
+                            <p className="text-sm font-bold text-indigo-900">自动生成班级邀请码</p>
+                            <p className="text-[10px] text-indigo-600/70 mt-1">新生首次登录需凭此码绑定班级。已采取高强度随机生成机制防猜测。</p>
+                          </div>
+                          <div className="bg-white border border-indigo-200 px-4 py-2.5 rounded-xl font-mono font-black text-indigo-600 tracking-widest shadow-sm select-all">{newInviteCode}</div>
+                       </div>
+                     </div>
+                     <div className="flex gap-3 pt-2 border-t border-slate-100">
+                       <button onClick={() => setShowNewTermModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all">取消</button>
+                       <button onClick={() => { setShowNewTermModal(false); alert("创建成功！"); }} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="rocket_launch" style={{fontSize: '18px'}}/> 确认创建并切换</button>
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {showBlockModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-8">
+               <div className="bg-white w-[480px] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 bg-amber-50 border-b border-amber-100 flex items-start gap-4">
+                    <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center shrink-0"><Icon name="block" style={{fontSize: '24px'}}/></div>
+                    <div><h2 className="font-black text-amber-900 text-lg mb-1">无法开启新学期</h2><p className="text-sm text-amber-700 leading-relaxed">系统检测到当前还有处于<strong>「进行中」</strong>状态的学期实例。</p></div>
+                  </div>
+                  <div className="p-6 bg-white space-y-4">
+                    <p className="text-sm text-slate-600 leading-relaxed">为保证 LBS 考勤打卡、AI 知识库交互及学生端入口等底层数据流的准确映射，<strong>同一门课程在同一时间只能存在一个处于活跃状态的班级。</strong></p>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs text-slate-500 flex items-start gap-2">
+                      <Icon name="lightbulb" className="text-indigo-400 shrink-0" style={{fontSize: '16px'}}/>
+                      <span>操作建议：请先将当前正在运行的学期执行<strong>「结课并归档」</strong>操作后，再尝试创建新的学期实例。</span>
+                    </div>
+                    <div className="flex flex-col gap-3 pt-4 border-t border-slate-100">
+                      <div className="flex gap-3">
+                        <button onClick={() => setShowBlockModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all">知道了，暂不开启</button>
+                      </div>
+                    </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {showScheduleConfirmModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-8">
+               <div className="bg-white w-[540px] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
+                    <h2 className="font-black text-amber-900 flex items-center gap-2"><Icon name="warning" className="text-amber-500" /> 全局排期生成与覆写确认</h2>
+                    <button onClick={() => setShowScheduleConfirmModal(false)}><Icon name="close" className="text-amber-500 hover:text-amber-700 transition-colors" /></button>
+                  </div>
+                  <div className="p-8">
+                    <div className="space-y-5 animate-in fade-in">
+                      <div className="bg-amber-50/50 text-amber-900 p-5 rounded-2xl border border-amber-200 text-sm leading-relaxed">
+                        <p className="font-bold mb-3 text-amber-700">⚠️ 修改全局规则将引发以下联动影响：</p>
+                        <ul className="list-disc pl-5 space-y-2 text-amber-800/80">
+                          <li>系统将基于最新配置的<strong className="font-bold text-amber-900">“开课日期与时间”</strong>重新生成所有课时的排期。</li>
+                          <li>您之前的课时排期配置<strong className="font-bold text-rose-500">将被全部覆盖</strong>。</li>
+                          <li>新的 LBS 考勤规则将立即对下一次打卡生效。</li>
+                        </ul>
+                      </div>
+                      <div className="flex gap-3 pt-4">
+                        <button onClick={() => setShowScheduleConfirmModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all">取消</button>
+                        <button onClick={handleGenerateSchedule} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all active:scale-95">我已知晓影响，应用覆写</button>
+                      </div>
+                    </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {showSyllabusModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-8">
+               <div className="bg-white w-[640px] h-[85vh] rounded-3xl shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+                  <div className="p-6 bg-indigo-50/50 border-b border-indigo-100 flex justify-between items-center shrink-0">
+                    <div>
+                      <h2 className="font-black text-indigo-900 flex items-center gap-2"><Icon name="format_list_numbered" className="text-indigo-600" /> 本学期课程大纲</h2>
+                      <p className="text-[10px] text-indigo-600/70 mt-1">设置当前学期的所有授课主题。在「统一排期 & 考勤」中生成排期时将以此大纲为准载入。</p>
+                    </div>
+                    <button onClick={() => setShowSyllabusModal(false)} className="w-8 h-8 bg-white rounded-full flex items-center justify-center border border-indigo-100 shadow-sm hover:text-indigo-600 transition-colors"><Icon name="close" style={{fontSize: '18px'}} /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50/30 flex flex-col">
+                    <div className="space-y-3 flex-1">
+                      {localSyllabus.map((item, idx) => (
+                        <div key={item.id} className={`flex items-start gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group ${isReadOnly ? 'opacity-80' : 'hover:border-indigo-300'}`}>
+                          <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 font-black text-xs flex items-center justify-center shrink-0 shadow-inner mt-1">{idx + 1}</div>
+                          <div className="flex-1 flex flex-col gap-2">
+                            <input type="text" value={item.title} onChange={e => handleSyllabusTitleChange(item.id, e.target.value)} disabled={isReadOnly} className="w-full bg-transparent text-sm font-bold text-slate-800 outline-none focus:text-indigo-600 transition-colors disabled:text-slate-600" placeholder="输入本讲课题大纲名称..." />
+                            <textarea value={item.desc || ''} onChange={e => handleSyllabusDescChange(item.id, e.target.value)} disabled={isReadOnly} rows="2" placeholder="添加本节课程的详细描述，学生端可见..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 transition-colors resize-none disabled:bg-transparent disabled:border-transparent disabled:px-0 disabled:resize-none overflow-hidden"></textarea>
+                          </div>
+                          {!isReadOnly && (
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-1">
+                              <button onClick={() => handleDeleteSyllabusItem(item.id)} className="w-8 h-8 rounded flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"><Icon name="delete_outline" style={{fontSize: '20px'}}/></button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {localSyllabus.length === 0 && <div className="text-center p-8 text-slate-400 font-bold text-sm">暂无大纲数据，请新增。</div>}
+                    </div>
+
+                    {!isReadOnly && (
+                      <div className="mt-6 pt-4 border-t border-slate-200/60 shrink-0">
+                         {showBatchInput ? (
+                            <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl animate-in fade-in">
+                               <p className="text-xs font-bold text-indigo-800 mb-2">批量新增教学课时大纲 (每行对应一节课)</p>
+                               <textarea value={batchText} onChange={e => setBatchText(e.target.value)} rows="5" className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none mb-3"></textarea>
+                               <div className="flex justify-end gap-2">
+                                  <button onClick={() => setShowBatchInput(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-lg transition-colors">取消</button>
+                                  <button onClick={handleBatchAddSyllabus} className="px-4 py-2 text-xs font-bold bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 transition-colors">确认插入大纲</button>
+                               </div>
+                            </div>
+                         ) : (
+                            <button onClick={() => setShowBatchInput(true)} className="w-full py-4 border-2 border-dashed border-indigo-200 text-indigo-500 rounded-2xl text-sm font-bold hover:bg-indigo-50 hover:border-indigo-300 transition-colors flex items-center justify-center gap-2"><Icon name="add_circle" /> 新增教学课时大纲 (支持批量新增)</button>
+                         )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-6 border-t border-slate-100 flex justify-end gap-3 shrink-0 bg-white rounded-b-3xl">
+                     <button onClick={() => setShowSyllabusModal(false)} className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all">{isReadOnly ? '关闭' : '取消修改'}</button>
+                     {!isReadOnly && <button onClick={() => {setShowSyllabusModal(false); alert("大纲已保存！请在外面点击“同步最新大纲并重排”以生效。");}} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all flex items-center gap-2"><Icon name="save" style={{fontSize: '18px'}}/> 保存课程大纲</button>}
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {showEditInfoModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-8">
+               <div className="bg-white w-[500px] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 bg-indigo-50/50 border-b border-indigo-100 flex justify-between items-center">
+                    <h2 className="font-black text-indigo-900 flex items-center gap-2"><Icon name="edit_note" className="text-indigo-600" /> 编辑学期与班级信息</h2>
+                    <button onClick={() => setShowEditInfoModal(false)}><Icon name="close" className="text-slate-400 hover:text-indigo-600 transition-colors" /></button>
+                  </div>
+                  <div className="p-8 space-y-6">
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1.5">学期/届次名称 <span className="text-rose-500">*</span></label>
+                        <input type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-slate-800 font-bold" />
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1.5">课程名称</label>
+                        <input type="text" value={editForm.courseName} onChange={e => setEditForm({...editForm, courseName: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-slate-800 font-bold" />
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1.5">授课地点</label>
+                        <input type="text" value={editForm.location} onChange={e => setEditForm({...editForm, location: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-slate-800 font-bold" />
+                     </div>
+                     <div className="flex gap-3 pt-4 border-t border-slate-100">
+                       <button onClick={() => setShowEditInfoModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all">取消</button>
+                       <button onClick={handleSaveInfo} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="save" style={{fontSize: '18px'}}/> 保存修改</button>
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [activeTab, setActiveTab] = useState('dashboard'); 
+      const [selectedStudentId, setSelectedStudentId] = useState(null);
+      
+      const [terms, setTerms] = useState(MOCK_DATA.initialTerms);
+      const initialActive = terms.find(t => t.status === 'active')?.id;
+      const [globalTermId, setGlobalTermId] = useState(initialActive || terms[0]?.id);
+      
+      const globalTerm = terms.find(t => t.id === globalTermId);
+      const isReadOnly = globalTerm?.status !== 'active';
+      const [showTermMenu, setShowTermMenu] = useState(false);
+
+      const [showNewTaskModal, setShowNewTaskModal] = useState(false);
+      const [newTaskType, setNewTaskType] = useState('作业'); 
+      const [showTaskPublishConfirm, setShowTaskPublishConfirm] = useState(false);
+
+      const showGlobalSelector = ['dashboard', 'students', 'interactive', 'analytics'].includes(activeTab);
+
+      return (
+        <div className="flex h-screen w-full bg-slate-50 overflow-hidden">
+          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            <header className="h-16 bg-white border-b flex items-center justify-between px-8 shrink-0 z-[100] shadow-sm relative">
+              <h2 className="text-lg font-extrabold text-slate-700">
+                {activeTab === 'dashboard' && '工作台概览'}
+                {activeTab === 'students' && '学生花名册'}
+                {activeTab === 'interactive' && '课堂互动间'}
+                {activeTab === 'analytics' && '学情分析'}
+                {activeTab === 'course' && '教学管理'}
+                {activeTab === 'dataManagement' && '数据检索与导出'}
+                {activeTab === 'settings' && '系统设置'}
+              </h2>
+              
+              {showGlobalSelector && (
+                <div className="relative">
+                  <div onClick={(e) => { e.stopPropagation(); setShowTermMenu(prev => !prev); }} className={`flex items-center justify-between gap-2 text-sm font-bold px-4 py-2 rounded-xl border shadow-sm cursor-pointer hover:bg-slate-50 transition-all group w-72 ${isReadOnly ? 'text-slate-600 border-slate-200 bg-slate-50' : 'bg-indigo-50/50 text-indigo-700 border-indigo-200'}`}>
+                    <span className="truncate">{globalTerm?.name || '暂无学期数据'}</span>
+                    <Icon name="swap_vert" className={`transition-transform duration-300 shrink-0 ${showTermMenu ? 'rotate-180' : ''}`} />
+                  </div>
+                  {showTermMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowTermMenu(false)}></div>
+                      <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95">
+                        <div className="px-4 py-2 text-xs font-bold text-slate-400 border-b border-slate-100 mb-1">切换全局业务学期</div>
+                        <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+                          {terms.map(t => (
+                             <button key={t.id} onClick={(e) => { e.stopPropagation(); setGlobalTermId(t.id); setShowTermMenu(false); }} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 transition-colors flex items-center justify-between group">
+                               <span className={`font-bold transition-colors truncate pr-2 ${globalTermId === t.id ? 'text-indigo-600' : 'text-slate-700 group-hover:text-indigo-600'}`}>{t.name}</span>
+                               {t.status === 'active' ? <span className="text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded border border-emerald-100 flex items-center gap-1 shrink-0"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>进行中</span> : <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">已归档</span>}
+                             </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </header>
+            <main className="flex-1 overflow-hidden relative z-0">
+              {activeTab === 'dashboard' && <DashboardView globalTerm={globalTerm} isReadOnly={isReadOnly} onOpenStudentProfile={setSelectedStudentId} onOpenNewTask={() => setShowNewTaskModal(true)} setActiveTab={setActiveTab} />}
+              {activeTab === 'students' && <StudentsView isReadOnly={isReadOnly} onOpenStudentProfile={setSelectedStudentId} />}
+              {activeTab === 'interactive' && <InteractiveRoomView isReadOnly={isReadOnly} />}
+              {activeTab === 'analytics' && <AnalyticsView isReadOnly={isReadOnly} onOpenStudentProfile={setSelectedStudentId} />}
+              {activeTab === 'course' && <CourseAndTasksView globalTermId={globalTermId} setGlobalTermId={setGlobalTermId} terms={terms} setTerms={setTerms} onOpenNewTask={() => setShowNewTaskModal(true)} />}
+              {activeTab === 'dataManagement' && <DataManagementView />}
+              {activeTab === 'settings' && <SettingsView />}
+            </main>
+          </div>
+          {selectedStudentId && <StudentProfileDrawer studentId={selectedStudentId} onClose={() => setSelectedStudentId(null)} />}
+          
+          {showNewTaskModal && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-8 backdrop-blur-sm">
+               <div className="bg-white w-[760px] max-w-full rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 bg-indigo-50/50 border-b border-indigo-100 flex justify-between items-center">
+                    <h2 className="font-black text-indigo-900 flex items-center gap-2"><Icon name="add_task" className="text-indigo-600" /> 发布新任务与测评</h2>
+                    <button onClick={() => setShowNewTaskModal(false)} className="text-slate-400 hover:text-indigo-600 transition-colors"><Icon name="close" style={{fontSize: '18px'}}/></button>
+                  </div>
+                  <div className="p-8">
+                     <div className="flex gap-4 mb-6">
+                       <label className={`flex-1 p-4 border rounded-2xl cursor-pointer transition-all ${newTaskType === '作业' ? 'border-indigo-500 bg-indigo-50 shadow-md ring-1 ring-indigo-500' : 'border-slate-200 hover:bg-slate-50'}`}>
+                         <input type="radio" className="sr-only" checked={newTaskType === '作业'} onChange={() => setNewTaskType('作业')} />
+                         <div className="flex items-center gap-3">
+                           <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${newTaskType === '作业' ? 'bg-indigo-500 text-white shadow-inner' : 'bg-slate-100 text-slate-400'}`}><Icon name="edit_document" style={{fontSize: '24px'}}/></div>
+                           <div><p className={`font-black text-sm mb-0.5 ${newTaskType === '作业' ? 'text-indigo-900' : 'text-slate-700'}`}>课程作业</p><p className={`text-[10px] ${newTaskType === '作业' ? 'text-indigo-600' : 'text-slate-500'}`}>主题短文、反思报告等</p></div>
+                         </div>
+                       </label>
+                       <label className={`flex-1 p-4 border rounded-2xl cursor-pointer transition-all ${newTaskType === '测评' ? 'border-rose-500 bg-rose-50 shadow-md ring-1 ring-rose-500' : 'border-slate-200 hover:bg-slate-50'}`}>
+                         <input type="radio" className="sr-only" checked={newTaskType === '测评'} onChange={() => setNewTaskType('测评')} />
+                         <div className="flex items-center gap-3">
+                           <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${newTaskType === '测评' ? 'bg-rose-500 text-white shadow-inner' : 'bg-slate-100 text-slate-400'}`}><Icon name="psychology" style={{fontSize: '24px'}}/></div>
+                           <div><p className={`font-black text-sm mb-0.5 ${newTaskType === '测评' ? 'text-rose-900' : 'text-slate-700'}`}>心理测评</p><p className={`text-[10px] ${newTaskType === '测评' ? 'text-rose-600' : 'text-slate-500'}`}>DASS-21 等专业量表</p></div>
+                         </div>
+                       </label>
+                       <label className={`flex-1 p-4 border rounded-2xl cursor-pointer transition-all ${newTaskType === '其他问卷' ? 'border-emerald-500 bg-emerald-50 shadow-md ring-1 ring-emerald-500' : 'border-slate-200 hover:bg-slate-50'}`}>
+                         <input type="radio" className="sr-only" checked={newTaskType === '其他问卷'} onChange={() => setNewTaskType('其他问卷')} />
+                         <div className="flex items-center gap-3">
+                           <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${newTaskType === '其他问卷' ? 'bg-emerald-500 text-white shadow-inner' : 'bg-slate-100 text-slate-400'}`}><Icon name="fact_check" style={{fontSize: '24px'}}/></div>
+                           <div><p className={`font-black text-sm mb-0.5 ${newTaskType === '其他问卷' ? 'text-emerald-900' : 'text-slate-700'}`}>其他问卷</p><p className={`text-[10px] ${newTaskType === '其他问卷' ? 'text-emerald-600' : 'text-slate-500'}`}>自定义调研、表单等</p></div>
+                         </div>
+                       </label>
+                     </div>
+                     <div className="space-y-5">
+                       <div>
+                         <label className="block text-xs font-bold text-slate-500 mb-1.5">标题 <span className="text-rose-500">*</span></label>
+                         <input type="text" placeholder={newTaskType === '作业' ? "例如：课程后段期末总结短文" : newTaskType === '测评' ? "例如：期中阶段心理健康普查" : "例如：期中教学质量满意度调研问卷"} className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none font-bold focus:ring-2 transition-all ${newTaskType === '作业' ? 'focus:ring-indigo-500' : newTaskType === '测评' ? 'focus:ring-rose-500' : 'focus:ring-emerald-500'}`} />
+                       </div>
+                       
+                       {newTaskType === '测评' && (
+                         <div>
+                           <label className="block text-xs font-bold text-slate-500 mb-1.5">量表选择 <span className="text-rose-500">*</span></label>
+                           <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-rose-500 outline-none transition-all font-bold cursor-pointer">
+                             <option>DASS-21 情绪自评量表</option><option>PHQ-9 抑郁症筛查量表</option><option>GAD-7 焦虑症筛查量表</option><option>SCL-90 症状自评量表</option>
+                           </select>
+                         </div>
+                       )}
+
+                       {newTaskType === '其他问卷' && (
+                         <div>
+                           <label className="block text-xs font-bold text-slate-500 mb-1.5">选择问卷模板 <span className="text-rose-500">*</span></label>
+                           <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-bold cursor-pointer">
+                             <option>教学质量反馈调研</option><option>期中学习状态自评</option><option>课程满意度评价表</option><option>使用外部表单 (请在下方填入链接)</option>
+                           </select>
+                         </div>
+                       )}
+
+                       <div className="grid grid-cols-2 gap-5">
+                         <div><label className="block text-xs font-bold text-slate-500 mb-1.5">截止日期与时间 <span className="text-rose-500">*</span></label><input type="datetime-local" className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 outline-none transition-all ${newTaskType === '作业' ? 'focus:ring-indigo-500' : newTaskType === '测评' ? 'focus:ring-rose-500' : 'focus:ring-emerald-500'}`} /></div>
+                         <div><label className="block text-xs font-bold text-slate-500 mb-1.5">发送对象</label><select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none"><option>当前班级 ({MOCK_DATA.kpis.totalStudents}人)</option></select></div>
+                       </div>
+                       
+                       <div>
+                         <label className="block text-xs font-bold text-slate-500 mb-1.5">{newTaskType === '作业' ? '作业要求与说明' : newTaskType === '测评' ? '测评导语' : '问卷说明与链接'}</label>
+                         <textarea rows="3" placeholder={newTaskType === '作业' ? "请输入具体的字数要求、格式要求..." : newTaskType === '测评' ? "请输入引导语，安抚学生情绪..." : "在此输入说明或直接粘贴外部问卷链接..."} className={`w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 outline-none transition-all resize-none ${newTaskType === '作业' ? 'focus:ring-indigo-500' : newTaskType === '测评' ? 'focus:ring-rose-500' : 'focus:ring-emerald-500'}`}></textarea>
+                       </div>
+                     </div>
+                     <div className="flex gap-3 pt-6 mt-6 border-t border-slate-100">
+                       <button onClick={() => setShowNewTaskModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">取消</button>
+                       <button onClick={() => setShowTaskPublishConfirm(true)} className={`flex-1 py-3 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${newTaskType === '作业' ? 'bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700' : newTaskType === '测评' ? 'bg-rose-500 shadow-rose-200 hover:bg-rose-600' : 'bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600'}`}><Icon name="send" style={{fontSize: '18px'}}/> 确认下发至小程序</button>
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {showTaskPublishConfirm && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-8 backdrop-blur-sm">
+               <div className="bg-white w-[420px] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                    <h2 className="font-black text-slate-800 flex items-center gap-2"><Icon name="help" className="text-slate-500" /> 发布确认</h2>
+                    <button onClick={() => setShowTaskPublishConfirm(false)}><Icon name="close" className="text-slate-400 hover:text-slate-600 transition-colors" /></button>
+                  </div>
+                  <div className="p-8">
+                    <p className="text-sm text-slate-600 mb-6 leading-relaxed">确定要正式下发该<strong className={`font-bold ${newTaskType === '作业' ? 'text-indigo-600' : newTaskType === '测评' ? 'text-rose-600' : 'text-emerald-600'}`}>{newTaskType}</strong>吗？</p>
+                    <div className="flex gap-3">
+                      <button onClick={() => setShowTaskPublishConfirm(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all">取消</button>
+                      <button onClick={() => { setShowTaskPublishConfirm(false); setShowNewTaskModal(false); alert("发布成功！"); }} className={`flex-1 py-3 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all ${newTaskType === '作业' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : newTaskType === '测评' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}>确认发布</button>
+                    </div>
+                  </div>
+               </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

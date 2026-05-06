@@ -733,7 +733,10 @@
             <div className="flex-1 flex overflow-hidden">
                <div className={`flex flex-col bg-slate-50/50 border-r border-slate-200 relative ${isEnded ? 'w-full' : 'w-2/3'}`}>
                   <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center shrink-0 z-20">
-                     <h3 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="forum" className="text-indigo-500" style={{fontSize: '18px'}}/> 互动公屏</h3>
+                     <div className="flex items-center gap-3">
+                       <h3 className="font-bold text-slate-700 flex items-center gap-2"><Icon name="forum" className="text-indigo-500" style={{fontSize: '18px'}}/> 互动公屏</h3>
+                       {!isEnded && <span className="flex items-center gap-1 text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 shadow-sm"><Icon name="group" style={{fontSize: '16px'}}/> 在线 {activeLesson.onlineCount} 人</span>}
+                     </div>
                      {!isEnded ? <span className="text-xs text-slate-400">鼠标悬浮可管控违规消息</span> : <span className="text-xs text-slate-400 font-bold bg-slate-100 px-2 py-1 rounded">当前为只读历史记录</span>}
                   </div>
 
@@ -881,7 +884,6 @@
                      </div>
                      <p className="text-sm text-slate-500 flex items-center gap-4">
                         <span className="flex items-center gap-1"><Icon name="schedule" style={{fontSize: '16px'}}/> {lesson.date} {lesson.time}</span>
-                        {lesson.status === 'active' && <span className="flex items-center gap-1 text-emerald-600 font-medium"><Icon name="group" style={{fontSize: '16px'}}/> 在线 {lesson.onlineCount} 人</span>}
                      </p>
                    </div>
                  </div>

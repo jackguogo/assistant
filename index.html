@@ -1027,7 +1027,7 @@
       const [batchText, setBatchText] = useState('');
 
       const [scheduleRules, setScheduleRules] = useState({
-        startDate: selectedTerm?.startDate || '2026-09-02', dayOfWeek: '3', startTime: '19:00', endTime: '21:00', location: '紫金港西1-201'
+        startDate: selectedTerm?.startDate || '2026-09-02', dayOfWeek: '3', startTime: '19:00', endTime: '21:00', location: '紫金港西1-201', radius: 500
       });
       const [scheduleList, setScheduleList] = useState([]);
 
@@ -1255,12 +1255,30 @@
                         </div>
                         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">打卡中心点 (地图定位)</label>
-                           <div className="flex gap-3">
+                           <div className="flex gap-3 mb-4">
                              <div className={`flex-1 bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center gap-3 ${isScheduleLocked || isReadOnly ? 'opacity-70' : ''}`}>
                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isScheduleLocked || isReadOnly ? 'bg-slate-200 text-slate-500' : 'bg-emerald-100 text-emerald-600'}`}><Icon name="person_pin_circle" style={{fontSize: '24px'}} /></div>
                                 <div><p className="text-sm font-bold text-slate-700">{scheduleRules.location}</p><p className="text-[10px] text-slate-400 font-mono mt-0.5">120.08°E, 30.30°N</p></div>
                              </div>
                              <button disabled={isScheduleLocked || isReadOnly} className={`border rounded-lg px-4 text-xs font-bold flex flex-col items-center justify-center shrink-0 shadow-sm transition-all ${isScheduleLocked || isReadOnly ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 active:scale-95'}`}><Icon name="map" style={{fontSize: '20px', marginBottom: '2px'}}/> 选点</button>
+                           </div>
+                           
+                           <div className="border-t border-slate-100 pt-4">
+                             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">有效打卡范围 (半径)</label>
+                             <div className="flex items-center gap-4">
+                               <input 
+                                 type="range" min="50" max="2000" step="50" 
+                                 value={scheduleRules.radius || 500} 
+                                 onChange={e => setScheduleRules({...scheduleRules, radius: e.target.value})} 
+                                 disabled={isScheduleLocked || isReadOnly} 
+                                 className={`flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500 ${isScheduleLocked || isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`} 
+                               />
+                               <span className={`text-sm font-bold w-16 text-right ${isScheduleLocked || isReadOnly ? 'text-slate-500' : 'text-emerald-600'}`}>{scheduleRules.radius || 500} 米</span>
+                             </div>
+                             <div className="flex justify-between text-[10px] text-slate-400 mt-2 px-1">
+                               <span>50m (极严)</span>
+                               <span>2000m (宽松)</span>
+                             </div>
                            </div>
                         </div>
                       </div>
